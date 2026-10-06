@@ -1,0 +1,10 @@
+# keep the build context small and readable (logs/ gets root-owned files)
+logs/
+backup-seed/
+splunk/
+docs/
+attack/
+seed/
+*.pdf
+.git/
+**/__pycache__/

@@ -1,0 +1,228 @@
+# ATB Market attack-chain lab. Single bridge network `atb`; the documented
+# production IPs live as network aliases so the scenario hostnames resolve.
+# All structured events land in ./logs (bind-mounted) and are ingested by Splunk.
+
+x-app: &app
+  restart: unless-stopped
+  networks: [atb]
+  volumes:
+    - ./logs:/var/log/atb
+
+networks:
+  atb:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.0.0/16
+
+services:
+  # ------------------------------------------------------------- databases
+  ishop-db:
+    image: mysql:8.4
+    container_name: ishop-db
+    command: ["--mysql-native-password=ON"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${ISHOP_DB}
+      MYSQL_USER: ${ISHOP_USER}
+      MYSQL_PASSWORD: ${ISHOP_PASS}
+    volumes:
+      - ./seed/mysql-ishop:/docker-entrypoint-initdb.d:ro
+    ports: ["3306:3306"]
+    networks:
+      atb:
+        aliases: [api.zakaz.atbmarket.com, db-ishop-p01]
+    restart: unless-stopped
+
+  supplier-db:
+    image: mysql:8.4
+    container_name: supplier-db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${SUPPLIER_DB}
+      MYSQL_USER: ${SUPPLIER_USER}
+      MYSQL_PASSWORD: ${SUPPLIER_PASS}
+    volumes:
+      - ./seed/mysql-supplier:/docker-entrypoint-initdb.d:ro
+    ports: ["3308:3306"]
+    networks:
+      atb:
+        aliases: [supplier-db.atbmarket.com]
+    restart: unless-stopped
+
+  education-db:
+    image: mysql:8.4
+    container_name: education-db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MOODLE_DB}
+      MYSQL_USER: ${MOODLE_USER}
+      MYSQL_PASSWORD: ${MOODLE_PASS}
+    volumes:
+      - ./seed/mysql-moodle:/docker-entrypoint-initdb.d:ro
+    ports: ["3307:3306"]
+    networks: [atb]
+    restart: unless-stopped
+
+  storeplus-db:
+    image: postgres:16
+    container_name: storeplus-db
+    environment:
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASS}
+      POSTGRES_DB: ${PG_DB}
+    volumes:
+      - ./seed/postgres:/docker-entrypoint-initdb.d:ro
+    ports: ["5432:5432"]
+    networks:
+      atb:
+        aliases: [pgsql-dev.store-plus.atbmarket.com]
+    restart: unless-stopped
+
+  # ------------------------------------------------------- web/app services
+  mobapp:
+    <<: *app
+    build: {context: ., dockerfile: services/mobapp/Dockerfile}
+    container_name: mobapp
+    hostname: mobapp.atbmarket.com
+    ports: ["8081:80"]
+    networks: {atb: {aliases: [mobapp.atbmarket.com]}}
+
+  education:
+    <<: *app
+    build: {context: ., dockerfile: services/education/Dockerfile}
+    container_name: education
+    hostname: education.atbmarket.com
+    ports: ["8082:80"]
+    networks: {atb: {aliases: [education.atbmarket.com]}}
+
+  www:
+    <<: *app
+    build: {context: ., dockerfile: services/www/Dockerfile}
+    container_name: www
+    hostname: www.atbmarket.com
+    environment:
+      ISHOP_DB_HOST: ishop-db
+      ISHOP_DB_USER: ${ISHOP_USER}
+      ISHOP_DB_PASS: ${ISHOP_PASS}
+      ISHOP_DB_NAME: ${ISHOP_DB}
+    depends_on: [ishop-db]
+    ports: ["8080:80"]
+    networks: {atb: {aliases: [www.atbmarket.com]}}
+
+  supplier:
+    <<: *app
+    build: {context: ., dockerfile: services/supplier/Dockerfile}
+    container_name: supplier
+    hostname: sp-web-p01
+    ports: ["8083:80"]
+    networks: {atb: {aliases: [supplier.atbmarket.com, sp-web-p01]}}
+
+  grafana:
+    <<: *app
+    build: {context: ., dockerfile: services/grafana/Dockerfile}
+    container_name: grafana
+    hostname: grafana.atbmarket.com
+    environment:
+      ZABBIX_URL: http://zabbix
+    depends_on: [zabbix]
+    ports: ["3000:80"]
+    networks: {atb: {aliases: [grafana.atbmarket.com]}}
+
+  zabbix:
+    <<: *app
+    build: {context: ., dockerfile: services/zabbix/Dockerfile}
+    container_name: zabbix
+    hostname: zb-app-p01
+    ports: ["8084:80"]
+    networks: {atb: {aliases: [zb-app-p01, zabbix.atbmarket.com]}}
+
+  oracle-mocks:
+    <<: *app
+    build: {context: ., dockerfile: services/oracle-mocks/Dockerfile}
+    container_name: oracle-mocks
+    hostname: oracle-db
+    ports: ["1581:1581", "1521:1521", "1251:1251"]
+    networks: {atb: {aliases: [erpdb, retaildb, ISMEDOC-DB]}}
+
+  exchange:
+    <<: *app
+    build: {context: ., dockerfile: services/exchange/Dockerfile}
+    container_name: exchange
+    hostname: ex.atbmarket.com
+    ports: ["8444:80"]
+    networks: {atb: {aliases: [ex.atbmarket.com]}}
+
+  ad-ldap:
+    <<: *app
+    build: {context: ., dockerfile: services/ad-ldap/Dockerfile}
+    container_name: ad-ldap
+    hostname: DC-MAIN-01
+    ports: ["8386:80"]
+    networks: {atb: {aliases: [DC-MAIN-01.atbmarket.com]}}
+
+  harbor:
+    <<: *app
+    build: {context: ., dockerfile: services/harbor/Dockerfile}
+    container_name: harbor
+    hostname: sh-harb-p01
+    ports: ["8085:80"]
+    networks: {atb: {aliases: [sh-harb-p01, harbor.atbmarket.com]}}
+
+  jenkins:
+    <<: *app
+    build: {context: ., dockerfile: services/jenkins/Dockerfile}
+    container_name: jenkins
+    hostname: jenkins.atbmarket.com
+    volumes:
+      - ./logs:/var/log/atb
+      - ./backup-seed:/mnt/BACKUP:ro      # CIFS //bkp-atman/BACKUP stand-in
+    ports: ["10050:10050"]
+    networks: {atb: {aliases: [jenkins.atbmarket.com]}}
+
+  # ------------------------------------------------------- ssh / pivot hosts
+  bastion:
+    build: {context: ., dockerfile: services/bastion/Dockerfile}
+    container_name: bastion
+    hostname: bastion-main-p01
+    volumes: [./logs:/var/log/atb]
+    ports: ["2210:22"]
+    networks: {atb: {aliases: [bastion-main-p01]}}
+    restart: unless-stopped
+
+  gitlab:
+    build: {context: ., dockerfile: services/gitlab/Dockerfile}
+    container_name: gitlab
+    hostname: gitlab-p01
+    volumes: [./logs:/var/log/atb]
+    ports: ["2222:22"]
+    networks: {atb: {aliases: [gitlab-p01.atbmarket.com, gitlab.atbmarket.com]}}
+    restart: unless-stopped
+
+  squid:
+    image: ubuntu/squid:latest
+    container_name: squid
+    volumes:
+      - ./services/squid/squid.conf:/etc/squid/squid.conf:ro
+      - ./logs:/var/log/atb
+    ports: ["3128:3128"]
+    networks: {atb: {aliases: [squid-proxy]}}
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------ SIEM
+  splunk:
+    image: splunk/splunk:9.3
+    container_name: splunk
+    environment:
+      SPLUNK_START_ARGS: --accept-license
+      SPLUNK_PASSWORD: ${SPLUNK_PASSWORD}
+    volumes:
+      - ./logs:/var/log/atb:ro
+      - ./splunk/apps/atb_inputs:/opt/splunk/etc/apps/atb_inputs
+      - splunk-var:/opt/splunk/var
+    ports: ["8000:8000", "8088:8088", "8089:8089"]
+    networks: {atb: {aliases: [splunk]}}
+    restart: unless-stopped
+
+volumes:
+  splunk-var:

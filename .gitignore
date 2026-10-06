@@ -1,0 +1,9 @@
+# generated locally by bootstrap.sh — never publish
+keys/
+backup-seed/
+logs/
+# python caches
+**/__pycache__/
+*.pyc
+# editor/OS cruft
+.DS_Store

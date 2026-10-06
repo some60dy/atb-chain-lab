@@ -1,0 +1,9 @@
+#!/bin/sh
+# Emit a structured login event for Splunk on every ssh session.
+SVC="bastion"
+LOG="/var/log/atb/${SVC}.json"
+TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+SRC="${SSH_CONNECTION%% *}"
+printf '{"time":"%s","host":"%s","service":"%s","src_ip":"%s","event":"ssh.login_root_key","user":"%s","msg":"root ssh session via recovered id_rsa_root"}\n' \
+  "$TS" "$(hostname)" "$SVC" "${SRC:--}" "$(id -un)" >> "$LOG" 2>/dev/null
+exit 0
