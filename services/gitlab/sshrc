@@ -1,0 +1,8 @@
+#!/bin/sh
+SVC="gitlab"
+LOG="/var/log/atb/${SVC}.json"
+TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+SRC="${SSH_CONNECTION%% *}"
+printf '{"time":"%s","host":"%s","service":"%s","src_ip":"%s","event":"ssh.login_root_key","user":"%s","msg":"root ssh to gitlab-p01 via recovered id_rsa_root"}\n' \
+  "$TS" "$(hostname)" "$SVC" "${SRC:--}" "$(id -un)" >> "$LOG" 2>/dev/null
+exit 0
