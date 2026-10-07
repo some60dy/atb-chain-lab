@@ -1,0 +1,23 @@
+# Organizer-only override: re-exposes the INTERNAL services on host ports so an
+# organizer can inspect/debug them without first taking a shell in the lab.
+# Players must NEVER get this file — with plain `docker compose up` the only
+# host-reachable services are the perimeter (www, mobapp, education, supplier,
+# exchange/OWA) plus Splunk.
+#
+#   make up-dev        # == docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+services:
+  ishop-db:      { ports: ["3306:3306"] }
+  supplier-db:   { ports: ["3308:3306"] }
+  education-db:  { ports: ["3307:3306"] }
+  zabbix-db:     { ports: ["3309:3306"] }
+  storeplus-db:  { ports: ["5432:5432"] }
+  grafana:       { ports: ["3000:80"] }
+  zabbix:        { ports: ["8084:80"] }
+  oracle-mocks:  { ports: ["1581:1581", "1521:1521", "1251:1251"] }
+  ad-ldap:       { ports: ["8386:80"] }
+  harbor:        { ports: ["8085:80"] }
+  jenkins:       { ports: ["10050:10050"] }
+  bastion:       { ports: ["2210:22"] }
+  gitlab:        { ports: ["2222:22"] }
+  squid:         { ports: ["3128:3128"] }

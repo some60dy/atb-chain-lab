@@ -158,8 +158,11 @@ a{color:inherit;text-decoration:none}
 .errcard p{color:#9a9a9a;margin-bottom:14px}
 .errcard pre{background:#2d2d2d;color:#ff9f9f;border-radius:10px;padding:16px;overflow:auto;
   font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace}
-.foot{color:#9a9a9a;font-size:13px;padding:24px 16px;max-width:1240px;margin:0 auto;
-  display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;border-top:1px solid #e6e6e6}
+.foot{color:#9a9a9a;font-size:13px;border-top:1px solid #e6e6e6;margin-top:24px}
+.foot .wrap{padding:24px 16px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:18px}
+.foot .fcol{display:flex;flex-direction:column;gap:6px}
+.foot .fcol b{color:#555;margin-bottom:2px}
+.foot .fcol a{color:#e30613;text-decoration:none}.foot .fcol a:hover{text-decoration:underline}
 @media(max-width:1000px){.tiles{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:760px){
   .hdr .wrap{flex-wrap:wrap}
@@ -358,9 +361,21 @@ def _section(title, products):
 
 
 def _footer():
-    return ('<footer class="foot"><span>&copy; 2026 АТБ-Маркет '
-            '&middot; www.atbmarket.com</span>'
-            '<span>Гаряча лінія: 0-800-500-415</span></footer>')
+    # Public ATB portals the player can reach directly (perimeter). The internal
+    # systems (grafana/zabbix/harbor/…) are intentionally NOT linked — they are
+    # found by pivoting. Links use the host-mapped ports documented in README.
+    portals = (
+        '<a href="http://localhost:8081/">Мобільний застосунок</a>'
+        '<a href="http://localhost:8082/">Навчальний портал</a>'
+        '<a href="http://localhost:8083/">Портал постачальника</a>'
+        '<a href="http://localhost:8444/">Корпоративна пошта</a>'
+    )
+    return ('<footer class="foot">'
+            '<div class="wrap">'
+            '<div class="fcol"><b>АТБ онлайн</b>%s</div>'
+            '<div class="fcol"><span>&copy; 2026 АТБ-Маркет &middot; www.atbmarket.com</span>'
+            '<span>Гаряча лінія: 0-800-500-415</span></div>'
+            '</div></footer>' % portals)
 
 
 def _page(title, body, status=200):

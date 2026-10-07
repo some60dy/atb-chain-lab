@@ -1,8 +1,17 @@
 FROM atb-base:latest
+# sp-web-p01 is a real ops jump-off: it ships the clients an attacker would use
+# to pivot from the web-shell (DB clients, ssh, nc) — mirrors the report's host.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+         default-mysql-client postgresql-client openssh-client \
+         netcat-openbsd curl iputils-ping ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 # mirror the report: service runs as unprivileged nginx (uid 993) on sp-web-p01
 RUN groupadd -g 990 nginx && useradd -u 993 -g 990 -M -s /usr/sbin/nologin nginx \
     && mkdir -p /var/www /app/upload \
     && chown -R nginx:nginx /app
+# small client for the Oracle mocks (tab protocol), on PATH for the shell user
+COPY attack/oracle_probe.py /usr/local/bin/oracle_probe.py
 COPY services/supplier/app.py /app/app.py
 COPY services/supplier/config.php /var/www/config.php
 # also at the app CWD so the report's relative read (importFile=config.php) works
