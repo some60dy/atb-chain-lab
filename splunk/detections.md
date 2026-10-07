@@ -8,6 +8,7 @@ SPL below into Search & Reporting.
 
 | Step | Detection idea | SPL (core) |
 |------|----------------|-----------|
+| 1a | APK package downloaded (recon) | `index=atb event=mobapp.apk_download` |
 | 1a | Hard-coded APK creds used | `index=atb event=mobapp.hardcoded_cred_used` |
 | 1a | Mobile API brute force | `index=atb event=mobapp.auth_fail \| stats count by src_ip \| where count>10` |
 | 1b | Moodle config disclosure | `index=atb event=education.config_disclosure` |
@@ -15,7 +16,7 @@ SPL below into Search & Reporting.
 | 3  | Supplier self-reg + reset abuse | `index=atb event=supplier.password_reset_link` |
 | 4  | LFI of sensitive files | `index=atb event=supplier.lfi_read importFile IN ("*config*","/etc/*","/proc/*")` |
 | 5  | WAF bypass / phar RCE / webshell | `index=atb event IN (supplier.waf_bypass,supplier.phar_deserialization_rce,supplier.webshell_exec)` |
-| 6  | Reused creds Grafana→Zabbix DB | `index=atb event IN (grafana.login_reused_creds,grafana.zabbix_db_write)` |
+| 6  | Reused creds + SQL via Grafana datasource | `index=atb event IN (grafana.login_reused_creds,grafana.datasource_query,grafana.zabbix_session_forged)` |
 | 6  | Forged Zabbix session → root RCE | `index=atb event=zabbix.script_create_rce \| table _time src_ip command output` |
 | 7  | Zabbix agent system.run | `index=atb event=jenkins.zbxd_system_run \| table _time src_ip cmd` |
 | 7  | Root SSH via backup key | `index=atb event=ssh.login_root_key` |

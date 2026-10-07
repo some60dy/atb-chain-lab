@@ -3,7 +3,8 @@
 Every step maps to a running container and a **copy-pasteable command** that
 works against the lab. Hostnames resolve via the compose network; from the host
 use `localhost:<port>` (port column in [`asset-inventory.md`](./asset-inventory.md)).
-The `attack/run_chain.sh` script executes the whole thing end-to-end.
+The `attack/solve.py` reference solver (organizers: `make up-dev && make solve`)
+executes the whole thing end-to-end and prints PASS/FAIL per step.
 
 Base URL convention below: `http://localhost:<port>` from the host, or
 `http://<service>` from inside the `attacker` container.

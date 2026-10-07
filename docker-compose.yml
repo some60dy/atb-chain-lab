@@ -28,7 +28,6 @@ services:
       MYSQL_PASSWORD: ${ISHOP_PASS}
     volumes:
       - ./seed/mysql-ishop:/docker-entrypoint-initdb.d:ro
-    ports: ["3306:3306"]
     networks:
       atb:
         aliases: [api.zakaz.atbmarket.com, db-ishop-p01]
@@ -44,7 +43,6 @@ services:
       MYSQL_PASSWORD: ${SUPPLIER_PASS}
     volumes:
       - ./seed/mysql-supplier:/docker-entrypoint-initdb.d:ro
-    ports: ["3308:3306"]
     networks:
       atb:
         aliases: [supplier-db.atbmarket.com]
@@ -60,8 +58,25 @@ services:
       MYSQL_PASSWORD: ${MOODLE_PASS}
     volumes:
       - ./seed/mysql-moodle:/docker-entrypoint-initdb.d:ro
-    ports: ["3307:3306"]
     networks: [atb]
+    restart: unless-stopped
+
+  # Zabbix frontend DB. The `grafana` DB user is over-privileged (can INSERT a
+  # forged admin session); the forged-session HMAC key lives in config.session_key.
+  zabbix-db:
+    image: mysql:8.4
+    container_name: zabbix-db
+    command: ["--mysql-native-password=ON"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: ${ZABBIX_DB_USER}
+      MYSQL_PASSWORD: ${ZABBIX_DB_PASS}
+    volumes:
+      - ./seed/mysql-zabbix:/docker-entrypoint-initdb.d:ro
+    networks:
+      atb:
+        aliases: [zabbix-db.atbmarket.com]
     restart: unless-stopped
 
   storeplus-db:
@@ -73,7 +88,6 @@ services:
       POSTGRES_DB: ${PG_DB}
     volumes:
       - ./seed/postgres:/docker-entrypoint-initdb.d:ro
-    ports: ["5432:5432"]
     networks:
       atb:
         aliases: [pgsql-dev.store-plus.atbmarket.com]
@@ -124,9 +138,12 @@ services:
     container_name: grafana
     hostname: grafana.atbmarket.com
     environment:
+      ZABBIX_DB_HOST: zabbix-db
+      ZABBIX_DB_NAME: zabbix
+      ZABBIX_DB_USER: ${ZABBIX_DB_USER}
+      ZABBIX_DB_PASS: ${ZABBIX_DB_PASS}
       ZABBIX_URL: http://zabbix
-    depends_on: [zabbix]
-    ports: ["3000:80"]
+    depends_on: [zabbix-db]
     networks: {atb: {aliases: [grafana.atbmarket.com]}}
 
   zabbix:
@@ -134,7 +151,12 @@ services:
     build: {context: ., dockerfile: services/zabbix/Dockerfile}
     container_name: zabbix
     hostname: zb-app-p01
-    ports: ["8084:80"]
+    environment:
+      ZABBIX_DB_HOST: zabbix-db
+      ZABBIX_DB_NAME: zabbix
+      ZABBIX_DB_USER: ${ZABBIX_DB_USER}
+      ZABBIX_DB_PASS: ${ZABBIX_DB_PASS}
+    depends_on: [zabbix-db]
     networks: {atb: {aliases: [zb-app-p01, zabbix.atbmarket.com]}}
 
   oracle-mocks:
@@ -142,7 +164,6 @@ services:
     build: {context: ., dockerfile: services/oracle-mocks/Dockerfile}
     container_name: oracle-mocks
     hostname: oracle-db
-    ports: ["1581:1581", "1521:1521", "1251:1251"]
     networks: {atb: {aliases: [erpdb, retaildb, ISMEDOC-DB]}}
 
   exchange:
@@ -158,7 +179,6 @@ services:
     build: {context: ., dockerfile: services/ad-ldap/Dockerfile}
     container_name: ad-ldap
     hostname: DC-MAIN-01
-    ports: ["8386:80"]
     networks: {atb: {aliases: [DC-MAIN-01.atbmarket.com]}}
 
   harbor:
@@ -166,7 +186,6 @@ services:
     build: {context: ., dockerfile: services/harbor/Dockerfile}
     container_name: harbor
     hostname: sh-harb-p01
-    ports: ["8085:80"]
     networks: {atb: {aliases: [sh-harb-p01, harbor.atbmarket.com]}}
 
   jenkins:
@@ -177,7 +196,6 @@ services:
     volumes:
       - ./logs:/var/log/atb
       - ./backup-seed:/mnt/BACKUP:ro      # CIFS //bkp-atman/BACKUP stand-in
-    ports: ["10050:10050"]
     networks: {atb: {aliases: [jenkins.atbmarket.com]}}
 
   # ------------------------------------------------------- ssh / pivot hosts
@@ -186,7 +204,6 @@ services:
     container_name: bastion
     hostname: bastion-main-p01
     volumes: [./logs:/var/log/atb]
-    ports: ["2210:22"]
     networks: {atb: {aliases: [bastion-main-p01]}}
     restart: unless-stopped
 
@@ -195,7 +212,6 @@ services:
     container_name: gitlab
     hostname: gitlab-p01
     volumes: [./logs:/var/log/atb]
-    ports: ["2222:22"]
     networks: {atb: {aliases: [gitlab-p01.atbmarket.com, gitlab.atbmarket.com]}}
     restart: unless-stopped
 
@@ -205,7 +221,6 @@ services:
     volumes:
       - ./services/squid/squid.conf:/etc/squid/squid.conf:ro
       - ./logs:/var/log/atb
-    ports: ["3128:3128"]
     networks: {atb: {aliases: [squid-proxy]}}
     restart: unless-stopped
 
