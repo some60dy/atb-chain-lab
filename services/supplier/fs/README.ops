@@ -1,0 +1,5 @@
+sp-web-p01 — SuiteCRM supplier portal
+  webroot      /var/www         (config.php, config_override.php, custom/)
+  app runtime  /app             (uploads -> /app/upload)
+  monitoring   zabbix agent, see /etc/zabbix/zabbix_agentd.conf
+  jump host    bastion-main-p01 (root key-only; ask infra)

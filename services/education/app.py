@@ -27,8 +27,18 @@ def moco_news_ajax():
         atblog.log("education.config_disclosure", ip, procedure="getPosts",
                    msg="unauthenticated Moodle config disclosure")
         return jsonify(CONFIG_LEAK), 200
+    if procedure == "getNews":
+        atblog.log("education.ajax", ip, procedure=procedure)
+        return jsonify(posts=NEWS), 200
     atblog.log("education.ajax", ip, procedure=procedure)
-    return jsonify(posts=[]), 200
+    return jsonify(error="unknown procedure", procedure=procedure), 400
+
+
+NEWS = [
+    {"title": "Оновлено курс «Інформаційна безпека» — пройдіть до 30.11"},
+    {"title": "Нова версія мобільного застосунку АТБ 8.0.48 для персоналу"},
+    {"title": "Технічні роботи на порталі постачальників у суботу"},
+]
 
 
 # ---------------------------------------------------------------------------
@@ -102,10 +112,11 @@ a:hover{text-decoration:underline}
 NEWS_JS = """
 // Load the "Новини" block the same way the moco_news Moodle block does.
 // <!-- moco_news block ajax: /md/blocks/moco_news/ajax.php -->
+// moco_news 1.4: procedures getNews (block) / getPosts (legacy, admin dashboard)
 (function () {
   var list = document.getElementById('news-list');
   var body = new URLSearchParams();
-  body.set('procedure', 'getPosts');
+  body.set('procedure', 'getNews');
   fetch('/md/blocks/moco_news/ajax.php', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -113,8 +124,6 @@ NEWS_JS = """
   })
     .then(function (r) { return r.json(); })
     .then(function (data) {
-      // moco_news block payload (see Network tab for raw response)
-      console.log('moco_news getPosts ->', data);
       var posts = (data && data.posts) || [];
       if (!posts.length) {
         list.innerHTML =

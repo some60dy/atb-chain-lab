@@ -14,6 +14,7 @@ RUN for i in $(seq 1 524); do \
     && chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys \
     && chmod 755 /etc/ssh/sshrc \
     && sed -i 's/#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config \
-    && sed -i 's/#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+    && sed -i 's/#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config \
+    && echo 'AllowUsers root@172.31.0.10' >> /etc/ssh/sshd_config
 EXPOSE 22
 CMD ["/usr/sbin/sshd","-D","-e"]

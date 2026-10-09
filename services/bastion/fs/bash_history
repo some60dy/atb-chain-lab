@@ -1,0 +1,11 @@
+cd /opt/deploy
+git -C /opt/deploy pull
+ssh root@gitlab-p01 'gitlab-rake gitlab:check SANITIZE=true'
+ssh root@gitlab-p01 'ls /var/opt/gitlab/git-data/repositories | wc -l'
+curl -s http://harbor.atbmarket.com/v2/_catalog
+curl -s http://harbor.atbmarket.com/v2/ishop/api/tags/list
+# ishop api moved off 10.0.7.118 -> db-ishop-p01
+mysql -h db-ishop-p01 -u ishop -p ishop -e 'select count(*) from users'
+psql -h pgsql-dev.store-plus.atbmarket.com -U asu asu -c '\dt'
+curl -s -X POST http://DC-MAIN-01.atbmarket.com/bind -d bind_dn=education@atbmarket.com -d password=...
+history -c
