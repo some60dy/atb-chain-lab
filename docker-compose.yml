@@ -67,12 +67,9 @@ services:
   zabbix-db:
     image: mysql:8.4
     container_name: zabbix-db
-    command: ["--mysql-native-password=ON"]
+    command: ["--mysql-native-password=ON", "--log-bin-trust-function-creators=1"]
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: zabbix
-      MYSQL_USER: ${ZABBIX_DB_USER}
-      MYSQL_PASSWORD: ${ZABBIX_DB_PASS}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}   # db + zabbix/grafana accounts come from the seed
     volumes:
       - ./seed/mysql-zabbix:/docker-entrypoint-initdb.d:ro
     networks:
@@ -108,6 +105,11 @@ services:
     build: {context: ., dockerfile: services/education/Dockerfile}
     container_name: education
     hostname: education.atbmarket.com
+    environment:
+      MOODLE_DB_HOST: education-db
+      MOODLE_DB_NAME: ${MOODLE_DB}
+      MOODLE_DB_USER: ${MOODLE_USER}
+      MOODLE_DB_PASS: ${MOODLE_PASS}
     ports: ["${EDU_PORT:-8082}:80"]
     networks: {atb: {aliases: [education.atbmarket.com]}}
 
@@ -148,18 +150,47 @@ services:
     depends_on: [zabbix-db]
     networks: {atb: {aliases: [grafana.atbmarket.com]}}
 
+  # Real Zabbix 6.0 LTS (official images). Server = zb-app-p01 (AllowRoot=1),
+  # frontend = zabbix.atbmarket.com:8080, zabbix-init provisions the estate once.
   zabbix:
-    <<: *app
     build: {context: ., dockerfile: services/zabbix/Dockerfile}
     container_name: zabbix
     hostname: zb-app-p01
     environment:
-      ZABBIX_DB_HOST: zabbix-db
-      ZABBIX_DB_NAME: zabbix
-      ZABBIX_DB_USER: ${ZABBIX_DB_USER}
-      ZABBIX_DB_PASS: ${ZABBIX_DB_PASS}
+      DB_SERVER_HOST: zabbix-db
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: ${ZBX_SRV_DB_USER}
+      MYSQL_PASSWORD: ${ZBX_SRV_DB_PASS}
+      ZBX_ALLOWUNSUPPORTEDDBVERSIONS: "1"
+      ZBX_STARTPOLLERS: "10"
+      ZBX_STARTPOLLERSUNREACHABLE: "3"
+      ZBX_TIMEOUT: "10"
     depends_on: [zabbix-db]
-    networks: {atb: {aliases: [zb-app-p01, zabbix.atbmarket.com]}}
+    networks: {atb: {aliases: [zb-app-p01]}}
+    restart: unless-stopped
+
+  zabbix-web:
+    build: {context: ., dockerfile: services/zabbix-web/Dockerfile}
+    container_name: zabbix-web
+    hostname: zabbix.atbmarket.com
+    environment:
+      DB_SERVER_HOST: zabbix-db
+      MYSQL_DATABASE: zabbix
+      MYSQL_USER: ${ZBX_SRV_DB_USER}
+      MYSQL_PASSWORD: ${ZBX_SRV_DB_PASS}
+      ZBX_SERVER_HOST: zb-app-p01
+      ZBX_SERVER_NAME: ATB Monitoring
+      PHP_TZ: Europe/Kyiv
+    depends_on: [zabbix]
+    networks: {atb: {aliases: [zabbix.atbmarket.com, zabbix-web]}}
+    restart: unless-stopped
+
+  zabbix-init:
+    build: {context: ., dockerfile: services/zabbix-init/Dockerfile}
+    container_name: zabbix-init
+    depends_on: [zabbix-web]
+    networks: [atb]
+    restart: on-failure
 
   oracle-mocks:
     <<: *app

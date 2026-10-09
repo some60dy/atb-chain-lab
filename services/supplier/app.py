@@ -9,17 +9,24 @@ Faithfully reproduces the chain in the write-up:
 
 Everything runs inside the isolated container; the web-shell executes real
 commands as the unprivileged `nginx` user (uid 993) to mirror the report.
+
+Behind the login it is a working SuiteCRM-style back-office (Accounts, Contacts,
+Opportunities, Products/Price Lists, Purchase Orders, Invoices, Documents, Cases,
+Calls, Meetings, Import wizard) backed by the pp_web1 MySQL on supplier-db.
 """
 import base64
 import os
 import re
 import secrets
 import subprocess
+import threading
 import time
 import uuid
 
 from flask import Flask, request, Response, send_from_directory
 import atblog
+import crm
+from crm import USERS, RESET_GUIDS, SESSIONS, current_user, html
 
 app = Flask(__name__)
 
@@ -27,195 +34,10 @@ UPLOAD_DIR = "/app/upload"
 WAF_SCAN_LIMIT = 180 * 1024           # Cloudflare WAF inspects ~first 180 KB only
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# in-memory "CRM" state
-USERS = {}                             # user_name -> {guid, password}
-RESET_GUIDS = {}                       # guid -> user_name
-SESSIONS = {}                          # PHPSESSID -> user_name
 
-
-def current_user():
-    return SESSIONS.get(request.cookies.get("PHPSESSID", ""))
-
-
-def html(body, status=200):
-    return Response(body, status=status, mimetype="text/html")
-
-
-# ---------------------------------------------------------------- UI views
-# Inline-CSS, offline, mobile-friendly SuiteCRM 7.10.25 look-and-feel.
-_BASE_CSS = """
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',Helvetica,Arial,sans-serif;color:#2b2f33;
-     background:#eef1f4;-webkit-font-smoothing:antialiased}
-a{color:#f08377;text-decoration:none}a:hover{text-decoration:underline}
-.wm{font-size:30px;font-weight:700;letter-spacing:.5px;color:#fff}
-.wm span{color:#f08377}
-.muted{color:#8a9199;font-size:13px}
-input,select{width:100%;padding:11px 12px;border:1px solid #cfd6dd;border-radius:4px;
-     font-size:14px;background:#fff;margin-top:6px}
-input:focus,select:focus{outline:none;border-color:#f08377;
-     box-shadow:0 0 0 2px rgba(240,131,119,.18)}
-label{display:block;font-size:12px;font-weight:600;color:#60666c;
-     text-transform:uppercase;letter-spacing:.4px;margin-top:16px}
-.btn{display:inline-block;width:100%;margin-top:22px;padding:12px;border:none;
-     border-radius:4px;background:#f08377;color:#fff;font-size:15px;font-weight:600;
-     cursor:pointer}
-.btn:hover{background:#e86f62}
-"""
-
-_LOGIN_CSS = _BASE_CSS + """
-body{display:flex;align-items:center;justify-content:center;min-height:100vh;
-     background:linear-gradient(135deg,#232a31 0%,#2f3a44 100%);padding:16px}
-.card{width:100%;max-width:380px;background:#fff;border-radius:8px;
-     box-shadow:0 10px 40px rgba(0,0,0,.35);overflow:hidden}
-.head{background:#2b333b;padding:28px 32px 24px;text-align:center}
-.sub{color:#aeb6bd;font-size:13px;margin-top:6px}
-.body{padding:26px 32px 30px}
-.foot{text-align:center;padding:16px;border-top:1px solid #eef1f4;
-     color:#9aa1a8;font-size:12px}
-.reg{text-align:center;margin-top:18px;font-size:13px}
-"""
-
-
-def login_page(error=""):
-    err = (f'<div style="color:#c0392b;font-size:13px;margin-top:14px">{error}</div>'
-           if error else "")
-    return f"""<!doctype html><html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SuiteCRM</title><style>{_LOGIN_CSS}</style></head><body>
-<div class="card">
-  <div class="head">
-    <div class="wm">Suite<span>CRM</span></div>
-    <div class="sub">ATB Supplier Portal</div>
-  </div>
-  <div class="body">
-    <form method="post" action="/index.php?action=Login">
-      <label>User Name</label>
-      <input type="text" name="user_name" autocomplete="username" placeholder="user name">
-      <label>Password</label>
-      <input type="password" name="password" autocomplete="current-password" placeholder="password">
-      <button class="btn" type="submit">Log In</button>
-      {err}
-    </form>
-    <div class="reg">New supplier?
-      <a href="/index.php?action=Signup">Register as a supplier</a>
-    </div>
-  </div>
-  <div class="foot">SuiteCRM 7.10.25</div>
-</div>
-</body></html>"""
-
-
-_PANEL_CSS = _BASE_CSS + """
-body{min-height:100vh}
-.wrap{display:flex;min-height:100vh}
-.side{width:230px;background:#2b333b;color:#cfd6dd;flex-shrink:0}
-.side .brand{padding:22px 24px;border-bottom:1px solid #3a434c}
-.side .brand .wm{font-size:22px}
-.side nav a{display:block;padding:13px 24px;color:#cfd6dd;font-size:14px;
-     border-left:3px solid transparent}
-.side nav a:hover{background:#333c45;text-decoration:none}
-.side nav a.active{background:#333c45;border-left-color:#f08377;color:#fff;font-weight:600}
-.main{flex:1;min-width:0}
-.top{background:#fff;border-bottom:1px solid #e1e6ea;padding:16px 28px;
-     font-size:18px;font-weight:600;color:#2b333b}
-.content{padding:28px}
-.box{background:#fff;border:1px solid #e1e6ea;border-radius:6px;
-     padding:26px;max-width:620px}
-.box h2{font-size:16px;margin-bottom:4px}
-.hint{color:#8a9199;font-size:13px;margin-bottom:12px}
-.resp{margin-top:20px;border:1px solid #e1e6ea;border-radius:6px;background:#fff;
-     max-width:620px}
-.resp .lbl{padding:10px 14px;border-bottom:1px solid #e1e6ea;font-size:12px;
-     font-weight:600;color:#60666c;text-transform:uppercase;letter-spacing:.4px}
-.resp iframe{width:100%;height:220px;border:none}
-@media(max-width:720px){.wrap{flex-direction:column}.side{width:100%}
-     .side nav{display:flex;flex-wrap:wrap}.side nav a{border-left:none}}
-"""
-
-
-def _panel(title, active, inner):
-    return f"""<!doctype html><html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SuiteCRM</title><style>{_PANEL_CSS}</style></head><body>
-<div class="wrap">
-  <aside class="side">
-    <div class="brand"><div class="wm">Suite<span>CRM</span></div>
-      <div class="muted" style="color:#8a9199;margin-top:4px">ATB Supplier Portal</div></div>
-    <nav>
-      <a href="/index.php?action=index">Home</a>
-      <a href="/index.php?action=Signup">Suppliers</a>
-      <a class="{ 'active' if active=='import' else '' }"
-         href="/index.php?module=Import&amp;action=index">Import</a>
-      <a href="/index.php?action=Logout">Log Out</a>
-    </nav>
-  </aside>
-  <main class="main">
-    <div class="top">{title}</div>
-    <div class="content">{inner}</div>
-  </main>
-</div>
-</body></html>"""
-
-
-def signup_page():
-    inner = """
-    <div class="box">
-      <h2>Register as a Supplier</h2>
-      <div class="hint">Create a supplier account. A password-reset link
-        will be generated for you to set your password.</div>
-      <form method="post" target="respframe"
-            action="/index.php?entryPoint=GeneratePassword">
-        <input type="hidden" name="link" value="0">
-        <label>Email / User Name</label>
-        <input type="text" name="user_name" placeholder="supplier@example.com" required>
-        <button class="btn" type="submit">Register</button>
-      </form>
-      <div class="hint" style="margin-top:16px">
-        Already registered? <a href="/index.php?action=Login">Back to login</a>
-      </div>
-    </div>
-    <div class="resp">
-      <div class="lbl">Status</div>
-      <iframe name="respframe" title="status"></iframe>
-    </div>"""
-    return _panel("Supplier Registration", "signup", inner)
-
-
-def change_password_page(guid, msg=""):
-    note = f'<div class="hint" style="margin-top:14px">{msg}</div>' if msg else ""
-    return f"""<!doctype html><html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SuiteCRM</title><style>{_LOGIN_CSS}</style></head><body>
-<div class="card"><div class="head"><div class="wm">Suite<span>CRM</span></div>
-<div class="sub">Set your password</div></div><div class="body">
-<form method="post" action="/index.php?entryPoint=Changenewpassword&amp;guid={guid}">
-  <label>New password</label><input type="password" name="password1" required>
-  <label>Confirm password</label><input type="password" name="password2" required>
-  <button class="btn" type="submit">Save</button>{note}
-</form></div></div></body></html>"""
-
-
-def import_page():
-    inner = """
-    <div class="box">
-      <h2>Import &amp; Field Mapping</h2>
-      <div class="hint">Upload a data file and refresh the import field mapping.</div>
-      <form method="post" target="respframe"
-            action="/index.php?module=Import&amp;action=RefreshMapping"
-            enctype="multipart/form-data">
-        <label>Import file / mapping source</label>
-        <input type="text" name="importFile" placeholder="/path/to/import.csv">
-        <label>Attachment</label>
-        <input type="file" name="file">
-        <button class="btn" type="submit">Import file / Refresh mapping</button>
-      </form>
-    </div>
-    <div class="resp">
-      <div class="lbl">Server response</div>
-      <iframe name="respframe" title="server response"></iframe>
-    </div>"""
-    return _panel("Import", "import", inner)
+login_page = crm.login_page
+signup_page = crm.signup_page
+change_password_page = crm.change_password_page
 
 
 # ---------------------------------------------------------------- step 3: reg
@@ -230,6 +52,7 @@ def index():
     if entry == "RegistrationStep3":
         user = form.get("user_name", "anon")
         USERS[user] = {"password": None}
+        crm.persist_user(user)
         atblog.log("supplier.self_registration", ip, user=user,
                    msg="unmoderated supplier account created")
         return html("<div>registration complete</div>", 200)
@@ -239,6 +62,7 @@ def index():
         guid = str(uuid.uuid4())
         RESET_GUIDS[guid] = user
         USERS.setdefault(user, {"password": None})["guid"] = guid
+        crm.persist_user(user)
         link = f"/index.php?entryPoint=Changenewpassword&guid={guid}"
         if form.get("link") != "1":
             atblog.log("supplier.password_reset_mailed", ip, user=user, guid=guid,
@@ -264,7 +88,7 @@ def index():
         if not user or p1 != p2:
             atblog.log("supplier.password_reset_fail", ip, guid=guid)
             return html("<div>invalid</div>", 400)
-        USERS[user]["password"] = p1
+        crm.set_password(user, p1)
         RESET_GUIDS.pop(guid, None)
         atblog.log("supplier.password_changed", ip, user=user, guid=guid,
                    msg="account password set via GUID link")
@@ -273,18 +97,21 @@ def index():
     if action == "Login" and request.method == "POST":
         user = form.get("user_name", "")
         pw = form.get("password", "")
-        if user in USERS and USERS[user].get("password") and USERS[user]["password"] == pw:
+        if user in USERS and crm.password_ok(USERS[user], pw):
             sid = secrets.token_hex(16)
             SESSIONS[sid] = user
+            crm.touch_login(user)
             atblog.log("supplier.login", ip, user=user, msg="supplier portal login")
-            resp = Response(status=302, headers={"Location": "/index.php?module=Import&action=index"})
+            resp = Response(status=302, headers={"Location": "/index.php?module=Home&action=index"})
             resp.set_cookie("PHPSESSID", sid, httponly=True)
             return resp
         atblog.log("supplier.login_fail", ip, user=user)
         return html(login_page("You must specify a valid username and password."), 401)
 
     if action == "Logout":
-        SESSIONS.pop(request.cookies.get("PHPSESSID", ""), None)
+        who = SESSIONS.pop(request.cookies.get("PHPSESSID", ""), None)
+        if who:
+            atblog.log("supplier.logout", ip, user=who)
         return html(login_page())
 
     if module == "Import" and not current_user():
@@ -295,19 +122,21 @@ def index():
     if module == "Import" and action in ("RefreshMapping", "Save"):
         return import_refresh(ip, action)
 
-    # ----------------------------------------- GET-only SuiteCRM UI views
-    # These only render for plain GET navigations and never match the
-    # exploit's entryPoint / module=Import&action=RefreshMapping|Save branches
-    # above, so the chain is unaffected.
+    # ------------------------------------------------- SuiteCRM back-office
+    # Everything below never matches the exploit's entryPoint /
+    # module=Import&action=RefreshMapping|Save branches above.
+    user = current_user()
     if request.method == "GET":
-        if action == "index" and not module and current_user():
-            return html(import_page())
         if action == "Login" or (not entry and not module and not action):
-            return html(login_page())
+            return crm.redirect("/index.php?module=Home&action=index") if user else html(login_page())
         if action == "Signup":
             return html(signup_page())
-        if module == "Import" and action == "index":
-            return html(import_page())
+    if entry == "download" and user:
+        return crm.download(user, ip)
+    if module or action == "index" or entry == "download":
+        if not user:
+            return crm.redirect("/index.php?action=Login")
+        return crm.dispatch(module or "Home", action or "index", user, ip)
 
     return html("<html><title>SuiteCRM</title><body>ATB Supplier Portal</body></html>")
 
@@ -315,7 +144,14 @@ def index():
 # ------------------------------------------------------ GET /  (login view)
 @app.get("/")
 def root():
+    if current_user():
+        return crm.redirect("/index.php?module=Home&action=index")
     return html(login_page())
+
+
+@app.get("/themes/SuiteP/css/style.css")
+def theme_css():
+    return Response(crm.THEME_CSS, mimetype="text/css")
 
 
 def import_refresh(ip, action):
@@ -471,6 +307,8 @@ def healthz():
     return "ok", 200
 
 
+
 if __name__ == "__main__":
     atblog.banner()
+    crm.start_bootstrap()
     app.run(host="0.0.0.0", port=80, threaded=True)

