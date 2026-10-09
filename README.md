@@ -36,6 +36,10 @@ make ps        # wait until everything is "running" (~60-90 s for DB seed + Splu
 make down      # stop         make reset = stop + wipe volumes & logs
 ```
 
+Port already taken on your host (e.g. Burp on 8080)? Override any perimeter
+port: `WWW_PORT=18080 MOBAPP_PORT=18081 make up` (also `EDU_PORT`,
+`SUPPLIER_PORT`, `OWA_PORT`, `SPLUNK_PORT`; defaults in `.env`).
+
 ## Your entry points (perimeter)
 
 | Service | URL | What it is |
@@ -51,40 +55,32 @@ Yes, Splunk really is `admin:changeme`. That's not a challenge step — it's a w
 at the original infrastructure, where it was exactly that. Use it to watch
 yourself (and to build detections): index `atb`.
 
-Everything else (Grafana, Zabbix, Harbor `sh-harb-p01`, Jenkins ZBXD, Oracle,
-MySQL/Postgres, the bastion and GitLab) is **internal** — no host port. You reach
-it by name (`grafana.atbmarket.com`, `zb-app-p01`, `harbor.atbmarket.com`,
-`jenkins.atbmarket.com`, `bastion-main-p01`, `gitlab-p01`, …) once you're inside.
+Everything else is **internal** — no host port, and not listed here. Finding out
+what exists inside, and how to reach it, is part of the game.
 
 ## The 10 objectives
 
-1. **Recon.** Pull the mobile app from the API host and recover the hard-coded API
-   credentials baked into its JS bundle. Separately, find the staff LMS endpoint
-   that leaks its configuration (DB creds, a reused service account, the salt).
-2. **SQL injection.** The shop's catalog filter has an injectable array **key**
-   (`filter[8][<here>]`) — a boolean 200/500 oracle. Dump the customer DB.
-3. **Supplier foothold.** Self-register on the supplier portal and abuse its
-   password-reset to take over an account.
-4. **LFI.** As a supplier user, read arbitrary server files through the Import
-   mapping feature — pull the portal's config and the secrets inside it.
-5. **Web-shell.** Upload a phar/PNG polyglot that slips past the WAF's 180 KB scan
-   window and get code execution. **This is your foothold on the internal
-   network** — pivot from here (the box has DB/SSH/`nc`/python clients).
-6. **Escalate: Grafana → Zabbix → root.** Reuse a looted credential to log into
-   Grafana, run SQL through its over-privileged data source to forge an admin
-   session in the Zabbix DB, then use the Zabbix UI to run a script — as **root**.
-7. **Keys to everything.** From Zabbix, reach the Jenkins host's monitoring agent
-   (ZBXD `system.run`), read the CIFS backup it can see, recover `id_rsa_root` and
-   SSH into the bastion as root.
-8. **Databases.** With the keys and creds you've gathered, hit the Oracle
-   instances, the Harbor registry (creds baked into image layers), Active
-   Directory and the raw MySQL/Postgres.
-9. **Mail.** Decrypt the supplier mailbox password and read corporate webmail —
-   the inbox is full of live password-reset links.
-10. **Source.** SSH into GitLab as root and confirm you own all 524 repositories.
+1. **Recon.** The public apps leak more than they should. Get the mobile app's
+   API credential, and find the staff portal endpoint that discloses its config.
+2. **SQL injection.** Something in the shop's catalogue reaches the database
+   unsanitised. Prove it and dump customers.
+3. **Supplier foothold.** Get a logged-in account on the supplier portal without
+   a moderator ever approving you.
+4. **File read.** As a supplier, read files on the portal server. Its config
+   holds secrets for half the company.
+5. **Web-shell.** Turn the portal into code execution despite the WAF in front
+   of it. This is your foothold inside — everything after this is a pivot.
+6. **Monitoring.** Work out what monitors the portal box, get into it with what
+   you already have, and become root on the monitoring server.
+7. **Keys to everything.** The monitoring server can talk to things you can't.
+   Find the backups, find the key, reach the jump host.
+8. **Databases.** Loot the credentials scattered across registries, configs and
+   shell history, and dump the retail and HR databases. Bind to the directory.
+9. **Mail.** Recover the supplier group mailbox password and read its inbox.
+10. **Source.** Own the source-control server — it only trusts the jump host.
 
-Hints live *in the world*: footers, config comments, the Zabbix host list, the
-bastion's shell history. Follow them.
+Hints live *in the world*: page source, config comments, file-system notes, the
+monitoring host list, shell history and SSH configs. Follow them.
 
 ## Blue team (Splunk)
 
@@ -102,7 +98,7 @@ each step is in [`splunk/detections.md`](splunk/detections.md).
 - `make up-dev` additionally exposes every internal service on a host port (for
   debugging / building detections) — see [`docker-compose.dev.yml`](docker-compose.dev.yml).
   **Never give players this.**
-- `make solve` runs [`attack/solve.py`](attack/solve.py), the reference solver that
+- `make solve` (pass the same `*_PORT=` overrides) runs [`attack/solve.py`](attack/solve.py), the reference solver that
   drives all 10 steps and prints PASS/FAIL. It requires `make up-dev`.
 - Full walk-through and exact values: [`docs/ctf-design.md`](docs/ctf-design.md)
   and [`SOLUTIONS.md`](SOLUTIONS.md) (spoilers).

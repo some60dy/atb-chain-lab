@@ -40,10 +40,31 @@ def _recv_exact(conn, n):
     return buf
 
 
+# Server= in zabbix_agentd.conf: only the monitoring server may query this agent.
+ALLOWED_SERVERS = ("zb-app-p01",)
+
+
+def _allowed(src_ip):
+    if src_ip.startswith("127."):
+        return True
+    for name in ALLOWED_SERVERS:
+        try:
+            if src_ip in socket.gethostbyname_ex(name)[2]:
+                return True
+        except OSError:
+            pass
+    return False
+
+
 class ZabbixHandler(socketserver.BaseRequestHandler):
     def handle(self):
         conn = self.request
         src_ip = self.client_address[0]
+        if not _allowed(src_ip):
+            # real agentd: logs "failed to accept an incoming connection" and drops it
+            atblog.log("jenkins.zbxd_rejected", src_ip=src_ip,
+                       msg="connection not from Server=zb-app-p01, dropped")
+            return
 
         header = _recv_exact(conn, 4)
         if not header:

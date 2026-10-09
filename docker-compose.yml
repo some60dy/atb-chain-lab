@@ -14,6 +14,7 @@ networks:
     ipam:
       config:
         - subnet: 172.31.0.0/16
+          ip_range: 172.31.128.0/17     # dynamic IPs; 172.31.0.x is for pinned hosts
 
 services:
   # ------------------------------------------------------------- databases
@@ -99,7 +100,7 @@ services:
     build: {context: ., dockerfile: services/mobapp/Dockerfile}
     container_name: mobapp
     hostname: mobapp.atbmarket.com
-    ports: ["8081:80"]
+    ports: ["${MOBAPP_PORT:-8081}:80"]
     networks: {atb: {aliases: [mobapp.atbmarket.com]}}
 
   education:
@@ -107,7 +108,7 @@ services:
     build: {context: ., dockerfile: services/education/Dockerfile}
     container_name: education
     hostname: education.atbmarket.com
-    ports: ["8082:80"]
+    ports: ["${EDU_PORT:-8082}:80"]
     networks: {atb: {aliases: [education.atbmarket.com]}}
 
   www:
@@ -120,8 +121,9 @@ services:
       ISHOP_DB_USER: ${ISHOP_USER}
       ISHOP_DB_PASS: ${ISHOP_PASS}
       ISHOP_DB_NAME: ${ISHOP_DB}
+      PORTAL_PORTS: "${MOBAPP_PORT:-8081},${EDU_PORT:-8082},${SUPPLIER_PORT:-8083},${OWA_PORT:-8444}"
     depends_on: [ishop-db]
-    ports: ["8080:80"]
+    ports: ["${WWW_PORT:-8080}:80"]
     networks: {atb: {aliases: [www.atbmarket.com]}}
 
   supplier:
@@ -129,7 +131,7 @@ services:
     build: {context: ., dockerfile: services/supplier/Dockerfile}
     container_name: supplier
     hostname: sp-web-p01
-    ports: ["8083:80"]
+    ports: ["${SUPPLIER_PORT:-8083}:80"]
     networks: {atb: {aliases: [supplier.atbmarket.com, sp-web-p01]}}
 
   grafana:
@@ -171,7 +173,7 @@ services:
     build: {context: ., dockerfile: services/exchange/Dockerfile}
     container_name: exchange
     hostname: ex.atbmarket.com
-    ports: ["8444:80"]
+    ports: ["${OWA_PORT:-8444}:80"]
     networks: {atb: {aliases: [ex.atbmarket.com]}}
 
   ad-ldap:
@@ -204,7 +206,8 @@ services:
     container_name: bastion
     hostname: bastion-main-p01
     volumes: [./logs:/var/log/atb]
-    networks: {atb: {aliases: [bastion-main-p01]}}
+    # pinned: gitlab's sshd only accepts root logins from the bastion
+    networks: {atb: {aliases: [bastion-main-p01], ipv4_address: 172.31.0.10}}
     restart: unless-stopped
 
   gitlab:
@@ -235,7 +238,7 @@ services:
       - ./logs:/var/log/atb:ro
       - ./splunk/apps/atb_inputs:/opt/splunk/etc/apps/atb_inputs
       - splunk-var:/opt/splunk/var
-    ports: ["8000:8000", "8088:8088", "8089:8089"]
+    ports: ["${SPLUNK_PORT:-8000}:8000"]
     networks: {atb: {aliases: [splunk]}}
     restart: unless-stopped
 

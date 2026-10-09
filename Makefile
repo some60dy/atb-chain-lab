@@ -13,9 +13,8 @@ build: base
 
 up: base
 	docker compose up -d
-	@echo "Players reach only the perimeter:"
-	@echo "  Shop http://localhost:8080  App http://localhost:8081  LMS http://localhost:8082"
-	@echo "  Supplier http://localhost:8083  OWA http://localhost:8444  Splunk http://localhost:8000"
+	@echo "Players reach only the perimeter (shop, app, LMS, supplier, OWA, Splunk):"
+	@docker compose ps --format '  {{.Name}}\t{{.Ports}}' | grep -- '->' || true
 
 # organizer mode: ALSO expose the internal services on host ports (see docker-compose.dev.yml)
 up-dev: base

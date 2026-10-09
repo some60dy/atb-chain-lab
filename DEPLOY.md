@@ -61,9 +61,15 @@ URL/port as an argument if you remap.
 
 Symptom on `make up`: *"Pool overlaps with other one on this address space"*.
 Edit `docker-compose.yml` → `networks.atb.ipam.config.subnet` (default
-`172.31.0.0/16`) to a free range, e.g. `172.28.0.0/16`, then `make up`.
+`172.31.0.0/16`) to a free range, e.g. `172.28.0.0/16`, then `make up`. Move the
+`ip_range` and the bastion's pinned `ipv4_address` with it, and the
+`AllowUsers root@<bastion-ip>` line in `services/gitlab/Dockerfile`.
 
-Host ports: shop 8080 · mobapp 8081 · education 8082 · supplier 8083 ·
+If a perimeter port is busy (*"address already in use"*), override it instead of
+editing compose: `WWW_PORT=18080 MOBAPP_PORT=18081 make up` (also `EDU_PORT`,
+`SUPPLIER_PORT`, `OWA_PORT`, `SPLUNK_PORT`).
+
+Host ports (internal ones only with `make up-dev`): shop 8080 · mobapp 8081 · education 8082 · supplier 8083 ·
 zabbix 8084 · harbor 8085 · ad-ldap 8386 · grafana 3000 · exchange 8444 ·
 jenkins/ZBXD 10050 · oracle 1581/1521/1251 · squid 3128 · bastion ssh 2210 ·
 gitlab ssh 2222 · mysql 3306/3307/3308 · postgres 5432 · **splunk 8000**.

@@ -13,6 +13,7 @@ commands as the unprivileged `nginx` user (uid 993) to mirror the report.
 import base64
 import os
 import re
+import secrets
 import subprocess
 import time
 import uuid
@@ -29,6 +30,11 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 # in-memory "CRM" state
 USERS = {}                             # user_name -> {guid, password}
 RESET_GUIDS = {}                       # guid -> user_name
+SESSIONS = {}                          # PHPSESSID -> user_name
+
+
+def current_user():
+    return SESSIONS.get(request.cookies.get("PHPSESSID", ""))
 
 
 def html(body, status=200):
@@ -71,7 +77,9 @@ body{display:flex;align-items:center;justify-content:center;min-height:100vh;
 """
 
 
-def login_page():
+def login_page(error=""):
+    err = (f'<div style="color:#c0392b;font-size:13px;margin-top:14px">{error}</div>'
+           if error else "")
     return f"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SuiteCRM</title><style>{_LOGIN_CSS}</style></head><body>
@@ -81,12 +89,13 @@ def login_page():
     <div class="sub">ATB Supplier Portal</div>
   </div>
   <div class="body">
-    <form method="post" action="#">
+    <form method="post" action="/index.php?action=Login">
       <label>User Name</label>
       <input type="text" name="user_name" autocomplete="username" placeholder="user name">
       <label>Password</label>
       <input type="password" name="password" autocomplete="current-password" placeholder="password">
       <button class="btn" type="submit">Log In</button>
+      {err}
     </form>
     <div class="reg">New supplier?
       <a href="/index.php?action=Signup">Register as a supplier</a>
@@ -138,7 +147,7 @@ def _panel(title, active, inner):
       <a href="/index.php?action=Signup">Suppliers</a>
       <a class="{ 'active' if active=='import' else '' }"
          href="/index.php?module=Import&amp;action=index">Import</a>
-      <a href="/index.php?action=Login">Log Out</a>
+      <a href="/index.php?action=Logout">Log Out</a>
     </nav>
   </aside>
   <main class="main">
@@ -157,6 +166,7 @@ def signup_page():
         will be generated for you to set your password.</div>
       <form method="post" target="respframe"
             action="/index.php?entryPoint=GeneratePassword">
+        <input type="hidden" name="link" value="0">
         <label>Email / User Name</label>
         <input type="text" name="user_name" placeholder="supplier@example.com" required>
         <button class="btn" type="submit">Register</button>
@@ -166,10 +176,24 @@ def signup_page():
       </div>
     </div>
     <div class="resp">
-      <div class="lbl">Password reset link</div>
-      <iframe name="respframe" title="password reset link"></iframe>
+      <div class="lbl">Status</div>
+      <iframe name="respframe" title="status"></iframe>
     </div>"""
     return _panel("Supplier Registration", "signup", inner)
+
+
+def change_password_page(guid, msg=""):
+    note = f'<div class="hint" style="margin-top:14px">{msg}</div>' if msg else ""
+    return f"""<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SuiteCRM</title><style>{_LOGIN_CSS}</style></head><body>
+<div class="card"><div class="head"><div class="wm">Suite<span>CRM</span></div>
+<div class="sub">Set your password</div></div><div class="body">
+<form method="post" action="/index.php?entryPoint=Changenewpassword&amp;guid={guid}">
+  <label>New password</label><input type="password" name="password1" required>
+  <label>Confirm password</label><input type="password" name="password2" required>
+  <button class="btn" type="submit">Save</button>{note}
+</form></div></div></body></html>"""
 
 
 def import_page():
@@ -216,9 +240,21 @@ def index():
         RESET_GUIDS[guid] = user
         USERS.setdefault(user, {"password": None})["guid"] = guid
         link = f"/index.php?entryPoint=Changenewpassword&guid={guid}"
+        if form.get("link") != "1":
+            atblog.log("supplier.password_reset_mailed", ip, user=user, guid=guid,
+                       msg="GUID reset link e-mailed (not returned)")
+            return html("<div>Account created. A link to set your password has been "
+                        f"sent to {user}. It may take up to 24h for a moderator "
+                        "to approve new suppliers.</div>", 200)
         atblog.log("supplier.password_reset_link", ip, user=user, guid=guid,
-                   msg="GUID reset link issued")
-        return html(f"<div>reset link sent: <a href='{link}'>{guid}</a></div>", 200)
+                   msg="GUID reset link returned in response (link=1)")
+        return html(f"<div>Password link: <a href='{link}' target='_top'>{link}</a></div>", 200)
+
+    if entry == "Changenewpassword" and request.method == "GET":
+        guid = request.args.get("guid", "")
+        if guid not in RESET_GUIDS:
+            return html(change_password_page("", "This link is invalid or has expired."), 400)
+        return html(change_password_page(guid))
 
     if entry == "Changenewpassword":
         guid = request.args.get("guid", "")
@@ -229,9 +265,31 @@ def index():
             atblog.log("supplier.password_reset_fail", ip, guid=guid)
             return html("<div>invalid</div>", 400)
         USERS[user]["password"] = p1
+        RESET_GUIDS.pop(guid, None)
         atblog.log("supplier.password_changed", ip, user=user, guid=guid,
                    msg="account password set via GUID link")
-        return html("<div>password changed</div>", 200)
+        return html(login_page("Password saved — please log in."), 200)
+
+    if action == "Login" and request.method == "POST":
+        user = form.get("user_name", "")
+        pw = form.get("password", "")
+        if user in USERS and USERS[user].get("password") and USERS[user]["password"] == pw:
+            sid = secrets.token_hex(16)
+            SESSIONS[sid] = user
+            atblog.log("supplier.login", ip, user=user, msg="supplier portal login")
+            resp = Response(status=302, headers={"Location": "/index.php?module=Import&action=index"})
+            resp.set_cookie("PHPSESSID", sid, httponly=True)
+            return resp
+        atblog.log("supplier.login_fail", ip, user=user)
+        return html(login_page("You must specify a valid username and password."), 401)
+
+    if action == "Logout":
+        SESSIONS.pop(request.cookies.get("PHPSESSID", ""), None)
+        return html(login_page())
+
+    if module == "Import" and not current_user():
+        atblog.log("supplier.unauth_import", ip, action=action)
+        return html(login_page("Your session has expired. Please log in."), 401)
 
     # ----------------------------------------------- step 4/5: Import mapping
     if module == "Import" and action in ("RefreshMapping", "Save"):
@@ -242,6 +300,8 @@ def index():
     # exploit's entryPoint / module=Import&action=RefreshMapping|Save branches
     # above, so the chain is unaffected.
     if request.method == "GET":
+        if action == "index" and not module and current_user():
+            return html(import_page())
         if action == "Login" or (not entry and not module and not action):
             return html(login_page())
         if action == "Signup":
@@ -372,8 +432,8 @@ button{background:#1f8a3b;color:#fff;border:none;border-radius:5px;padding:10px 
      border-radius:3px;padding:3px 9px;margin:3px 4px 0 0;cursor:pointer;color:#9fe0ab;font-size:12px}
 .prompt{color:#7fe08a}
 </style></head><body>
-<h1>sp-web-p01 — www-data shell</h1>
-<div class="muted">Runs commands through the dropped web-shell (/upload/shell.php). Pivot from here.</div>
+<h1>sp-web-p01 — nginx shell</h1>
+<div class="muted">Runs commands through the dropped web-shell (/upload/shell.php).</div>
 <div id="out">$ id
 (type a command and press Run)</div>
 <div class="row"><span class="prompt" style="align-self:center">$</span>
@@ -381,10 +441,7 @@ button{background:#1f8a3b;color:#fff;border:none;border-radius:5px;padding:10px 
   <button onclick="run()">Run</button></div>
 <div class="chips">
   <span class="chip" onclick="setcmd('id; hostname')">id; hostname</span>
-  <span class="chip" onclick="setcmd('cat /var/www/config_override.php')">read config_override.php</span>
   <span class="chip" onclick="setcmd('ls -la /app/upload')">ls upload</span>
-  <span class="chip" onclick="setcmd('getent hosts grafana.atbmarket.com zb-app-p01 harbor.atbmarket.com')">resolve internal hosts</span>
-  <span class="chip" onclick="setcmd('curl -s http://harbor.atbmarket.com/v2/_catalog')">curl harbor</span>
 </div>
 <script>
 const out=document.getElementById('out'),cmd=document.getElementById('cmd');

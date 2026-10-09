@@ -1,0 +1,4 @@
+# <file system>        <mount point>  <type>  <options>                                   <dump> <pass>
+UUID=3f1c0e2a-9b7d-4c55-8e21-6a0f4d2b7c11  /  ext4  errors=remount-ro  0  1
+# nightly root/home backups from all linux hosts land on the CIFS share
+//bkp-atman/BACKUP     /mnt/BACKUP    cifs    credentials=/root/.smb-bkp,ro,uid=zabbix     0      0

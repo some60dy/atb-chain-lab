@@ -12,7 +12,7 @@ services:
   education-db:  { ports: ["3307:3306"] }
   zabbix-db:     { ports: ["3309:3306"] }
   storeplus-db:  { ports: ["5432:5432"] }
-  grafana:       { ports: ["3000:80"] }
+  grafana:       { ports: ["3000:3000"] }
   zabbix:        { ports: ["8084:80"] }
   oracle-mocks:  { ports: ["1581:1581", "1521:1521", "1251:1251"] }
   ad-ldap:       { ports: ["8386:80"] }
@@ -21,3 +21,4 @@ services:
   bastion:       { ports: ["2210:22"] }
   gitlab:        { ports: ["2222:22"] }
   squid:         { ports: ["3128:3128"] }
+  splunk:        { ports: ["8088:8088", "8089:8089"] }

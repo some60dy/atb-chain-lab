@@ -364,11 +364,14 @@ def _footer():
     # Public ATB portals the player can reach directly (perimeter). The internal
     # systems (grafana/zabbix/harbor/…) are intentionally NOT linked — they are
     # found by pivoting. Links use the host-mapped ports documented in README.
+    mob, edu, sup, owa = (os.environ.get("PORTAL_PORTS", "8081,8082,8083,8444")
+                          .split(",") + ["", "", "", ""])[:4]
+    host = (request.host or "localhost").split(":")[0]
     portals = (
-        '<a href="http://localhost:8081/">Мобільний застосунок</a>'
-        '<a href="http://localhost:8082/">Навчальний портал</a>'
-        '<a href="http://localhost:8083/">Портал постачальника</a>'
-        '<a href="http://localhost:8444/">Корпоративна пошта</a>'
+        f'<a href="http://{host}:{mob}/">Мобільний застосунок</a>'
+        f'<a href="http://{host}:{edu}/">Навчальний портал</a>'
+        f'<a href="http://{host}:{sup}/">Портал постачальника</a>'
+        f'<a href="http://{host}:{owa}/">Корпоративна пошта</a>'
     )
     return ('<footer class="foot">'
             '<div class="wrap">'

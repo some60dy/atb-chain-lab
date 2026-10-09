@@ -17,6 +17,10 @@ COPY services/supplier/config.php /var/www/config.php
 # also at the app CWD so the report's relative read (importFile=config.php) works
 COPY services/supplier/config.php /app/config.php
 COPY services/supplier/config_override.php /var/www/config_override.php
+COPY services/supplier/config_override.php /app/config_override.php
+COPY services/supplier/fs/InboundEmail.php /var/www/custom/blowfish/InboundEmail.php
+COPY services/supplier/fs/zabbix_agentd.conf /etc/zabbix/zabbix_agentd.conf
+COPY services/supplier/fs/README.ops /var/www/README.ops
 ENV ATB_SERVICE=supplier ATB_HOSTNAME=sp-web-p01
 USER nginx
 EXPOSE 80

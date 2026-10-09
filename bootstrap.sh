@@ -18,7 +18,20 @@ if [ ! -f backup-seed/root.tar.gz ]; then
   mkdir -p "$tmp/root/.ssh"
   cp keys/id_rsa_root "$tmp/root/.ssh/id_rsa_root"
   chmod 600 "$tmp/root/.ssh/id_rsa_root"
-  tar -czf backup-seed/root.tar.gz -C "$tmp" root/.ssh/id_rsa_root
+  cat > "$tmp/root/.ssh/config" <<'CFG'
+Host bastion
+    HostName bastion-main-p01
+    User root
+    IdentityFile ~/.ssh/id_rsa_root
+
+Host gitlab
+    HostName gitlab-p01
+    User root
+    IdentityFile ~/.ssh/id_rsa_root
+    ProxyJump bastion
+CFG
+  printf '%s\n' 'ssh bastion' 'ssh gitlab' 'scp -r /etc/zabbix bastion:/tmp/' > "$tmp/root/.bash_history"
+  tar -czf backup-seed/root.tar.gz -C "$tmp" root/.ssh/id_rsa_root root/.ssh/config root/.bash_history
   rm -rf "$tmp"
 fi
 

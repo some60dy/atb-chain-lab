@@ -7,7 +7,7 @@ Zabbix schema, so the attacker can read `config.session_key` and INSERT a forged
 admin row into `sessions` — the setup for the Zabbix takeover (step 6b).
 
 Everything here is a browser-clickable UI; no host port, reach it after pivoting
-from the supplier web-shell (curl / port-forward to http://grafana.atbmarket.com).
+from the supplier web-shell (curl / port-forward to http://grafana.atbmarket.com:3000).
 """
 import os
 import secrets
@@ -162,9 +162,8 @@ def explore():
             result_html = _render_table(cols, rows, meta)
 
     examples = (
-        'SELECT session_key FROM config',
-        'SELECT userid, username, roleid FROM users',
-        'SELECT hostid, host, agent_ip FROM hosts',
+        'SELECT host, name, agent_ip FROM hosts',
+        "SELECT FROM_UNIXTIME(MAX(lastaccess)) AS last_login FROM sessions",
     )
     chips = "".join(
         f'<span class="chip" onclick="document.getElementById(\'sql\').value='
@@ -177,7 +176,7 @@ def explore():
   <div class="panel">
     <form method="post" action="/explore">
       <label>SQL query</label>
-      <textarea id="sql" name="sql" spellcheck="false">{sql or 'SELECT session_key FROM config'}</textarea>
+      <textarea id="sql" name="sql" spellcheck="false">{sql or 'SELECT host, name, agent_ip FROM hosts'}</textarea>
       <div style="margin-top:8px">{chips}</div>
       <button class="btn" type="submit">Run query</button>
     </form>
@@ -241,4 +240,4 @@ def healthz():
 
 if __name__ == "__main__":
     atblog.banner()
-    app.run(host="0.0.0.0", port=80, threaded=True)
+    app.run(host="0.0.0.0", port=3000, threaded=True)
