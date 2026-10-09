@@ -102,6 +102,8 @@ each step is in [`splunk/detections.md`](splunk/detections.md).
   drives all 10 steps and prints PASS/FAIL. It requires `make up-dev`.
 - Full walk-through and exact values: [`docs/ctf-design.md`](docs/ctf-design.md)
   and [`SOLUTIONS.md`](SOLUTIONS.md) (spoilers).
+- [`docs/attack-chain.md`](docs/attack-chain.md) has a copy-paste command block
+  for every step. All 10 steps are verified working with `make solve`.
 
 ## Docs
 
