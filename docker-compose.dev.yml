@@ -13,7 +13,7 @@ services:
   zabbix-db:     { ports: ["3309:3306"] }
   storeplus-db:  { ports: ["5432:5432"] }
   grafana:       { ports: ["3000:3000"] }
-  zabbix:        { ports: ["8084:80"] }
+  zabbix-web:    { ports: ["8084:8080"] }
   oracle-mocks:  { ports: ["1581:1581", "1521:1521", "1251:1251"] }
   ad-ldap:       { ports: ["8386:80"] }
   harbor:        { ports: ["8085:80"] }

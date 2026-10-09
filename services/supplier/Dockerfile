@@ -13,6 +13,8 @@ RUN groupadd -g 990 nginx && useradd -u 993 -g 990 -M -s /usr/sbin/nologin nginx
 # small client for the Oracle mocks (tab protocol), on PATH for the shell user
 COPY attack/oracle_probe.py /usr/local/bin/oracle_probe.py
 COPY services/supplier/app.py /app/app.py
+COPY services/supplier/crm.py /app/crm.py
+COPY services/supplier/suitecrm_seed.py /app/suitecrm_seed.py
 COPY services/supplier/config.php /var/www/config.php
 # also at the app CWD so the report's relative read (importFile=config.php) works
 COPY services/supplier/config.php /app/config.php
