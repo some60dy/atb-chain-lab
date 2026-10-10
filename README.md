@@ -3,8 +3,7 @@
 A self-contained Docker CTF that reproduces a 10-step red-team kill-chain against
 a fictional retailer, "ATB Market". You start at the **perimeter** — a handful of
 public web apps — and have to work inward: pop a shell, pivot across the internal
-network, loot credentials and escalate until you reach source control. A Splunk
-instance watches every host, so the same lab doubles as a blue-team exercise.
+network, loot credentials and escalate until you reach source control.
 
 ![ATB CTF demo](docs/media/demo.gif)
 
