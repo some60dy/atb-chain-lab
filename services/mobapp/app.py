@@ -854,19 +854,19 @@ footer a{color:#dde;text-decoration:none}footer .col{min-width:180px}footer b{co
 
 
 def page(title, body):
-    return Response(f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+    return Response(f"""<!doctype html><html lang="uk"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(title)}</title><meta name="description" content="ATB Market mobile app: loyalty card, weekly deals, store finder.">
+<title>{html.escape(title)}</title><meta name="description" content="Мобільний застосунок АТБ-Маркет: картка лояльності, акції тижня, пошук магазинів.">
 <link rel="icon" href="/favicon.ico"><style>{CSS}</style></head><body>
-<div class="nav"><div class="in"><a class="logo" href="/">ATB<small>mobile</small></a>
-<a class="l" href="/#features">Features</a><a class="l" href="/promo">Weekly deals</a><a class="l" href="/stores">Stores</a>
-<a class="l" href="/support">Support</a><span class="sp"></span><a class="l" href="/download/atb-market.apk">Download for Android</a></div></div>
+<div class="nav"><div class="in"><a class="logo" href="/">АТБ<small>mobile</small></a>
+<a class="l" href="/#features">Можливості</a><a class="l" href="/promo">Акції тижня</a><a class="l" href="/stores">Магазини</a>
+<a class="l" href="/support">Підтримка</a><span class="sp"></span><a class="l" href="/download/atb-market.apk">Завантажити для Android</a></div></div>
 <div class="wrap">{body}</div>
-<footer><div class="in"><div class="col"><b>ATB-Market LLC</b>Dnipro, Ukraine<br>Hotline 0 800 500 415 (free)<br>mobile@atbmarket.com</div>
-<div class="col"><b>App</b><a href="/download/atb-market.apk">Android APK {APP_VERSION}</a><br><a href="/support">Help &amp; FAQ</a><br><a href="/changelog">What's new</a></div>
-<div class="col"><b>Legal</b><a href="/privacy">Privacy policy</a><br><a href="/terms">Loyalty programme terms</a></div>
-<div class="col"><b>Partners</b><a href="/api/docs">Mobile API reference</a><br><a href="/api/v1/health">Service status</a></div>
-<div class="col" style="flex:1;text-align:right">&copy; 2014&ndash;{date.today().year} ATB-Market LLC</div></div></footer>
+<footer><div class="in"><div class="col"><b>ТОВ «АТБ-Маркет»</b>Дніпро, Україна<br>Гаряча лінія 0 800 500 415 (безкоштовно)<br>mobile@atbmarket.com</div>
+<div class="col"><b>Застосунок</b><a href="/download/atb-market.apk">Android APK {APP_VERSION}</a><br><a href="/support">Довідка та FAQ</a><br><a href="/changelog">Що нового</a></div>
+<div class="col"><b>Правове</b><a href="/privacy">Політика конфіденційності</a><br><a href="/terms">Умови програми лояльності</a></div>
+<div class="col"><b>Партнерам</b><a href="/api/docs">Довідник Mobile API</a><br><a href="/api/v1/health">Стан сервісу</a></div>
+<div class="col" style="flex:1;text-align:right">&copy; 2014&ndash;{date.today().year} ТОВ «АТБ-Маркет»</div></div></footer>
 </body></html>""", mimetype="text/html")
 
 
@@ -882,35 +882,35 @@ def _promo_tiles(items):
 def index():
     promo = _weekly_promo()
     body = f"""
-<div class="hero"><div><h1>ATB in your pocket.<br>Shop. Scan. Save.</h1>
-<p>Your digital ATB card, personal coupons and the weekly <b>Economy</b> catalogue &mdash; updated every Thursday.
-Register with your phone number in under a minute.</p>
-<div class="btns"><a class="btn" href="/download/atb-market.apk">&#11015; Download APK ({APP_VERSION})</a>
-<a class="btn ghost" href="/promo">This week's deals</a></div>
-<p style="font-size:12px;margin-top:12px">Android 6.0+ &middot; 31 MB &middot; iOS version coming soon</p></div>
-<div class="phone"><div class="screen"><div class="bar">My ATB card</div>
-<div class="cardv">Olena K. &middot; Gold<b>4 812 pts</b><div class="bars"></div></div>
-<div class="row">-15% on all dairy &middot; <b>Activate</b></div><div class="row">x3 points on coffee</div>
-<div class="row">Nearest store: 350 m</div></div></div></div>
-<h2 id="features">Everything you need for the weekly shop</h2>
+<div class="hero"><div><h1>АТБ у твоїй кишені.<br>Купуй. Скануй. Економ.</h1>
+<p>Твоя цифрова картка АТБ, персональні купони та щотижневий каталог <b>«Економія»</b> &mdash; оновлюється щочетверга.
+Реєстрація за номером телефону менш ніж за хвилину.</p>
+<div class="btns"><a class="btn" href="/download/atb-market.apk">&#11015; Завантажити APK ({APP_VERSION})</a>
+<a class="btn ghost" href="/promo">Акції цього тижня</a></div>
+<p style="font-size:12px;margin-top:12px">Android 6.0+ &middot; 31 МБ &middot; версія для iOS незабаром</p></div>
+<div class="phone"><div class="screen"><div class="bar">Моя картка АТБ</div>
+<div class="cardv">Олена К. &middot; Gold<b>4 812 балів</b><div class="bars"></div></div>
+<div class="row">-15% на всю молочку &middot; <b>Активувати</b></div><div class="row">x3 бали на каву</div>
+<div class="row">Найближчий магазин: 350 м</div></div></div></div>
+<h2 id="features">Усе потрібне для покупок на тиждень</h2>
 <div class="grid">
-<div class="tile"><h3>Digital loyalty card</h3><p>Show the barcode at the till, collect points on every receipt, pay with points.</p></div>
-<div class="tile"><h3>Personal coupons</h3><p>Coupons picked for you every week. Activate in one tap &mdash; the discount applies automatically.</p></div>
-<div class="tile"><h3>Weekly catalogue</h3><p>All "Economy" prices for the week, with shopping list and reminders.</p></div>
-<div class="tile"><h3>Store finder</h3><p>{len(STORES)}+ stores on the map with opening hours and services.</p></div>
-<div class="tile"><h3>Quick sign-up</h3><p>Just your phone number and an SMS code &mdash; no passwords to remember.</p></div>
-<div class="tile"><h3>E-receipts</h3><p>Your purchase history and points ledger, always at hand.</p></div></div>
-<h2>Economy week &middot; {promo["validFrom"]} &ndash; {promo["validTo"]}</h2>
+<div class="tile"><h3>Цифрова картка лояльності</h3><p>Покажи штрихкод на касі, накопичуй бали з кожного чека, розраховуйся балами.</p></div>
+<div class="tile"><h3>Персональні купони</h3><p>Купони, підібрані саме для тебе щотижня. Активація в один дотик &mdash; знижка застосовується автоматично.</p></div>
+<div class="tile"><h3>Каталог тижня</h3><p>Усі ціни «Економія» на тиждень, зі списком покупок і нагадуваннями.</p></div>
+<div class="tile"><h3>Пошук магазинів</h3><p>{len(STORES)}+ магазинів на мапі з годинами роботи та послугами.</p></div>
+<div class="tile"><h3>Швидка реєстрація</h3><p>Лише номер телефону та SMS-код &mdash; жодних паролів запам'ятовувати.</p></div>
+<div class="tile"><h3>Електронні чеки</h3><p>Історія покупок і рух балів завжди під рукою.</p></div></div>
+<h2>Тиждень «Економія» &middot; {promo["validFrom"]} &ndash; {promo["validTo"]}</h2>
 <div class="grid promo">{_promo_tiles(promo["items"][:8])}</div>
-<p><a href="/promo">See all {len(promo["items"])} offers &rarr;</a></p>
-<h2>Questions</h2>
-<details><summary>How do I get the app?</summary><p>Download the Android package from this page and allow installation from this source when prompted. Store listings are being updated.</p></details>
-<details><summary>I didn't receive the SMS code</summary><p>Wait 60 seconds and tap "Send again". Check that the number is in +380 format. Still nothing? Call 0 800 500 415.</p></details>
-<details><summary>Can I keep my plastic card?</summary><p>Yes. Enter its number in Profile &rarr; Cards and the points are merged into your digital card.</p></details>
-<details><summary>I'm a developer / partner</summary><p>The mobile gateway API reference is published at <a href="/api/docs">/api/docs</a>
-(<a href="/api/v1/openapi.json">OpenAPI 3 JSON</a>). Client access requires a provisioned app credential.</p></details>
+<p><a href="/promo">Переглянути всі {len(promo["items"])} пропозицій &rarr;</a></p>
+<h2>Питання</h2>
+<details><summary>Як встановити застосунок?</summary><p>Завантаж Android-пакет із цієї сторінки та дозволь встановлення з цього джерела, коли з'явиться запит. Розміщення в магазинах оновлюється.</p></details>
+<details><summary>Не прийшов SMS-код</summary><p>Зачекай 60 секунд і натисни «Надіслати ще раз». Перевір, що номер у форматі +380. Досі нічого? Телефонуй 0 800 500 415.</p></details>
+<details><summary>Чи можу я залишити пластикову картку?</summary><p>Так. Введи її номер у розділі Профіль &rarr; Картки, і бали об'єднаються з цифровою карткою.</p></details>
+<details><summary>Я розробник / партнер</summary><p>Довідник API мобільного шлюзу опубліковано за адресою <a href="/api/docs">/api/docs</a>
+(<a href="/api/v1/openapi.json">OpenAPI 3 JSON</a>). Доступ клієнта потребує виданого облікового запису застосунку.</p></details>
 """
-    return page("ATB Market - Mobile App", body)
+    return page("АТБ-Маркет — Мобільний застосунок", body)
 
 
 @app.get("/promo")
@@ -920,10 +920,10 @@ def promo_page():
     items = [i for i in promo["items"] if not cat or i["category"] == cat]
     cats = sorted({i["category"] for i in promo["items"]})
     opts = "".join(f'<option{" selected" if c == cat else ""}>{html.escape(c)}</option>' for c in cats)
-    body = (f'<h2>Economy week &middot; {promo["validFrom"]} &ndash; {promo["validTo"]}</h2>'
-            f'<form class="f"><select name="category"><option value="">All categories</option>{opts}</select>'
-            f'<button>Filter</button></form><div class="grid promo">{_promo_tiles(items)}</div>')
-    return page("Weekly deals - ATB Market", body)
+    body = (f'<h2>Тиждень «Економія» &middot; {promo["validFrom"]} &ndash; {promo["validTo"]}</h2>'
+            f'<form class="f"><select name="category"><option value="">Усі категорії</option>{opts}</select>'
+            f'<button>Фільтр</button></form><div class="grid promo">{_promo_tiles(items)}</div>')
+    return page("Акції тижня — АТБ-Маркет", body)
 
 
 @app.get("/stores")
@@ -936,49 +936,49 @@ def stores_page():
         f'<tr><td>{s["id"]}</td><td>{s["format"]}</td><td>{s["city"]}</td><td>{html.escape(s["address"])}</td>'
         f'<td>{s["hours"]["mon_sat"]}</td><td>{", ".join(x.replace("_", " ") for x in s["services"])}</td></tr>'
         for s in rows[:200])
-    body = (f'<h2>Store finder</h2><form class="f"><select name="city"><option value="">All cities</option>{opts}</select>'
-            f'<input name="q" placeholder="Street" value="{html.escape(qs)}"><button>Search</button></form>'
-            f'<p>{len(rows)} store(s)</p><table><thead><tr><th>ID</th><th>Format</th><th>City</th><th>Address</th>'
-            f'<th>Hours</th><th>Services</th></tr></thead><tbody>{tr}</tbody></table>')
-    return page("Stores - ATB Market", body)
+    body = (f'<h2>Пошук магазинів</h2><form class="f"><select name="city"><option value="">Усі міста</option>{opts}</select>'
+            f'<input name="q" placeholder="Вулиця" value="{html.escape(qs)}"><button>Пошук</button></form>'
+            f'<p>{len(rows)} магазин(ів)</p><table><thead><tr><th>ID</th><th>Формат</th><th>Місто</th><th>Адреса</th>'
+            f'<th>Години</th><th>Послуги</th></tr></thead><tbody>{tr}</tbody></table>')
+    return page("Магазини — АТБ-Маркет", body)
 
 
 @app.get("/support")
 def support_page():
-    body = """<h2>Help &amp; support</h2><div class="grid">
-<div class="tile"><h3>Hotline</h3><p>0 800 500 415 &mdash; free from any Ukrainian number, daily 08:00&ndash;21:00.</p></div>
-<div class="tile"><h3>E-mail</h3><p>mobile@atbmarket.com &mdash; please include your phone number and app version (Profile &rarr; About).</p></div>
-<div class="tile"><h3>Lost card</h3><p>Your points are tied to your phone number. Sign in on a new device and your digital card is restored.</p></div></div>
-<h2>Known issues in 8.0.48</h2><ul><li>Map may show stores without hours on some Xiaomi devices &mdash; fix in 8.0.50.</li>
-<li>Push notifications are delayed on Android 14 when battery saver is on.</li></ul>"""
-    return page("Support - ATB Market", body)
+    body = """<h2>Довідка та підтримка</h2><div class="grid">
+<div class="tile"><h3>Гаряча лінія</h3><p>0 800 500 415 &mdash; безкоштовно з будь-якого українського номера, щодня 08:00&ndash;21:00.</p></div>
+<div class="tile"><h3>E-mail</h3><p>mobile@atbmarket.com &mdash; будь ласка, вкажи свій номер телефону та версію застосунку (Профіль &rarr; Про застосунок).</p></div>
+<div class="tile"><h3>Загублена картка</h3><p>Твої бали прив'язані до номера телефону. Увійди на новому пристрої &mdash; і цифрова картка відновиться.</p></div></div>
+<h2>Відомі проблеми у 8.0.48</h2><ul><li>На деяких пристроях Xiaomi мапа може показувати магазини без годин роботи &mdash; виправлення у 8.0.50.</li>
+<li>Push-сповіщення затримуються на Android 14, коли увімкнено режим енергозбереження.</li></ul>"""
+    return page("Підтримка — АТБ-Маркет", body)
 
 
 @app.get("/changelog")
 def changelog_page():
-    body = """<h2>What's new</h2>
-<div class="tile"><h3>8.0.48</h3><p>Coupons screen redesign; faster card barcode; bug fixes.</p></div><br>
-<div class="tile"><h3>8.0.30</h3><p>Store finder filters by service (ATM, bakery, parcel lockers). Points history export.</p></div><br>
-<div class="tile"><h3>8.0.16</h3><p>New sign-up by phone number + SMS code. Weekly catalogue with shopping list.</p></div>"""
-    return page("What's new - ATB Market", body)
+    body = """<h2>Що нового</h2>
+<div class="tile"><h3>8.0.48</h3><p>Оновлений екран купонів; швидший штрихкод картки; виправлення помилок.</p></div><br>
+<div class="tile"><h3>8.0.30</h3><p>Фільтри пошуку магазинів за послугами (банкомат, пекарня, поштомати). Експорт історії балів.</p></div><br>
+<div class="tile"><h3>8.0.16</h3><p>Нова реєстрація за номером телефону + SMS-код. Каталог тижня зі списком покупок.</p></div>"""
+    return page("Що нового — АТБ-Маркет", body)
 
 
 @app.get("/privacy")
 def privacy_page():
-    body = """<h2>Privacy policy</h2><p>ATB-Market LLC processes your phone number, name, date of birth, purchase history and
-approximate location to operate the loyalty programme, personalise offers and show nearby stores. Data is stored in
-Ukraine and retained for the duration of your membership plus 3 years. You can request export or deletion of your data
-at mobile@atbmarket.com.</p><p>Analytics and crash reports are collected without advertising identifiers.</p>"""
-    return page("Privacy - ATB Market", body)
+    body = """<h2>Політика конфіденційності</h2><p>ТОВ «АТБ-Маркет» обробляє твій номер телефону, ім'я, дату народження, історію покупок та
+приблизне місцезнаходження для роботи програми лояльності, персоналізації пропозицій і показу магазинів поблизу. Дані зберігаються в
+Україні впродовж усього членства плюс 3 роки. Ти можеш запросити експорт або видалення своїх даних
+на mobile@atbmarket.com.</p><p>Аналітика та звіти про збої збираються без рекламних ідентифікаторів.</p>"""
+    return page("Конфіденційність — АТБ-Маркет", body)
 
 
 @app.get("/terms")
 def terms_page():
-    body = """<h2>Loyalty programme terms</h2><ol><li>1 point is credited for every 10 UAH on a receipt (excluding tobacco and alcohol).</li>
-<li>10 points = 1 UAH when paying with points; points expire 12 months after the last purchase.</li>
-<li>Tiers: Standard, Silver (2,500 pts/yr), Gold (8,000), Platinum (20,000).</li>
-<li>One digital card per phone number. Personal coupons are non-transferable.</li></ol>"""
-    return page("Terms - ATB Market", body)
+    body = """<h2>Умови програми лояльності</h2><ol><li>1 бал нараховується за кожні 10 грн у чеку (крім тютюну та алкоголю).</li>
+<li>10 балів = 1 грн при розрахунку балами; бали згорають через 12 місяців після останньої покупки.</li>
+<li>Рівні: Standard, Silver (2 500 балів/рік), Gold (8 000), Platinum (20 000).</li>
+<li>Одна цифрова картка на один номер телефону. Персональні купони не передаються іншим особам.</li></ol>"""
+    return page("Умови — АТБ-Маркет", body)
 
 
 @app.get("/api/docs")
@@ -999,7 +999,7 @@ def api_docs():
             f'<p>Machine-readable spec: <a href="/api/v1/openapi.json">/api/v1/openapi.json</a> &middot; '
             f'Servers: {", ".join("<code>" + s["url"] + "</code>" for s in spec["servers"])}</p>'
             + "".join(eps) +
-            '<h2>Sign-up flow</h2><pre>POST /register/login   {"phoneNumber":"+380671234567"}      (Basic)\n'
+            '<h2>Процес реєстрації</h2><pre>POST /register/login   {"phoneNumber":"+380671234567"}      (Basic)\n'
             '  -> 201 {"token":"&lt;challenge&gt;","expiresIn":180,...}\n'
             'POST /register/verify  {"token":"&lt;challenge&gt;","otp":"123456"}  (Basic)\n'
             '  -> 200 {"accessToken":"...","refreshToken":"..."}\n'
