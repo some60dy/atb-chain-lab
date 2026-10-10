@@ -19,6 +19,6 @@ services:
   harbor:        { ports: ["8085:80"] }
   jenkins:       { ports: ["10050:10050"] }
   bastion:       { ports: ["2210:22"] }
-  gitlab:        { ports: ["2222:22"] }
+  gitlab:        { ports: ["2222:22", "8087:80"] }
   squid:         { ports: ["3128:3128"] }
   splunk:        { ports: ["8088:8088", "8089:8089"] }
