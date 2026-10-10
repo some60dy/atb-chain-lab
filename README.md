@@ -6,6 +6,8 @@ public web apps — and have to work inward: pop a shell, pivot across the inter
 network, loot credentials and escalate until you reach source control. A Splunk
 instance watches every host, so the same lab doubles as a blue-team exercise.
 
+![ATB CTF demo](docs/media/demo.gif)
+
 **Lab only.** Every host, credential and vulnerability here is fictional and
 deliberately insecure. Run it on an isolated machine and never expose the ports.
 
