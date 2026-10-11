@@ -96,6 +96,34 @@ walks the full chain, and the ready scripts in [`attack/`](attack/) drive each s
 together they let even a beginner finish the lab. If you are experienced, do it the
 hard way: fully by hand, without the writeup or the scripts.
 
+## Kill chain
+
+```mermaid
+flowchart TD
+    subgraph PERIMETER["Perimeter (published entry points)"]
+        S1["1. Recon<br/>mobapp APK + Moodle config leak"]
+        S2["2. Boolean SQLi<br/>www shop -> dump ishop.users"]
+        S3["3. Self-register<br/>SuiteCRM supplier portal"]
+        S4["4. LFI via Import<br/>read server configs"]
+        S5["5. phar web-shell<br/>RCE as nginx on sp-web-p01"]
+    end
+    subgraph INTERNAL["Internal (reachable only by pivoting)"]
+        S6["6. Grafana to Zabbix<br/>root on zb-app-p01"]
+        S7["7. zabbix_get on Jenkins<br/>CIFS backup -> id_rsa_root -> bastion"]
+        S8["8. Databases + AD<br/>MySQL / PostgreSQL / Oracle"]
+        S9["9. Mail<br/>Blowfish decrypt -> OWA / EWS"]
+        S10["10. GitLab via bastion<br/>524 repos"]
+    end
+
+    S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8 --> S9 --> S10
+    S1 -. reused corporate creds .-> S6
+    S1 -. reused corporate creds .-> S8
+    S4 -. Blowfish key .-> S9
+    S4 -. Oracle DSNs .-> S8
+    S7 -. root SSH key .-> S10
+    S10 --> FLAG["Flag ATB on the GitLab projects page"]
+```
+
 ## Blue team (Splunk)
 
 Every container ships structured JSON to Splunk (index `atb`). Whole-chain view:
