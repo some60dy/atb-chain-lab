@@ -98,30 +98,46 @@ hard way: fully by hand, without the writeup or the scripts.
 
 ## Kill chain
 
+The chain is not one straight line. Recon forks into a standalone data dump
+and the foothold track; the mailbox falls from the perimeter without the deep
+pivot; and once you are inside, the last objectives open in parallel. Solid
+arrows are the path you take, dotted arrows are earlier loot a later step
+reuses. Node labels are the objectives only, no technique is spelled out.
+
 ```mermaid
 flowchart TD
-    subgraph PERIMETER["Perimeter (published entry points)"]
-        S1["1. Recon<br/>mobapp APK + Moodle config leak"]
-        S2["2. Boolean SQLi<br/>www shop -> dump ishop.users"]
-        S3["3. Self-register<br/>SuiteCRM supplier portal"]
-        S4["4. LFI via Import<br/>read server configs"]
-        S5["5. phar web-shell<br/>RCE as nginx on sp-web-p01"]
-    end
-    subgraph INTERNAL["Internal (reachable only by pivoting)"]
-        S6["6. Grafana to Zabbix<br/>root on zb-app-p01"]
-        S7["7. zabbix_get on Jenkins<br/>CIFS backup -> id_rsa_root -> bastion"]
-        S8["8. Databases + AD<br/>MySQL / PostgreSQL / Oracle"]
-        S9["9. Mail<br/>Blowfish decrypt -> OWA / EWS"]
-        S10["10. GitLab via bastion<br/>524 repos"]
+    S1["1. Recon"]
+
+    subgraph PERIMETER["Perimeter (no pivot needed)"]
+        S2["2. SQL injection"]
+        S3["3. Supplier foothold"]
+        S4["4. File read"]
+        S5["5. Web-shell"]
+        S9["9. Mail"]
     end
 
-    S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8 --> S9 --> S10
-    S1 -. reused corporate creds .-> S6
-    S1 -. reused corporate creds .-> S8
-    S4 -. Blowfish key .-> S9
-    S4 -. Oracle DSNs .-> S8
-    S7 -. root SSH key .-> S10
-    S10 --> FLAG["Flag ATB on the GitLab projects page"]
+    subgraph INTERNAL["Internal (reachable only by pivoting)"]
+        S6["6. Monitoring"]
+        S7["7. Keys to everything"]
+        S8["8. Databases"]
+        S10["10. Source"]
+    end
+
+    %% recon forks: a standalone dump, and the foothold track
+    S1 --> S2
+    S1 --> S3 --> S4 --> S5 --> S6 --> S7
+
+    %% file read opens the mailbox in parallel, no pivot required
+    S4 --> S9
+
+    %% deep access forks into two parallel objectives
+    S7 --> S8
+    S7 --> S10 --> FLAG["Flag"]
+
+    %% dotted = earlier loot reused by a later step (no tooling named)
+    S1 -. reused creds .-> S6
+    S1 -. reused creds .-> S8
+    S4 -. leaked secrets .-> S8
 ```
 
 ## Blue team (Splunk)
